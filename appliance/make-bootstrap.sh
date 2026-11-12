@@ -12,7 +12,12 @@ LABNET_DIR="$(cd "$HERE/.." && pwd)"
 ARCH="${ARCH:-aarch64}"
 WORK="${WORK:-$HERE/.workout}"
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
-REL="https://github.com/termux/termux-packages/releases/latest/download/bootstrap-$ARCH.zip"
+VER="${BOOTSTRAP_VERSION:-}"
+if [ -n "$VER" ]; then
+  REL="https://github.com/termux/termux-packages/releases/download/bootstrap-${VER}/bootstrap-$ARCH.zip"
+else
+  REL="https://github.com/termux/termux-packages/releases/latest/download/bootstrap-$ARCH.zip"
+fi
 
 say() { printf '\n\033[1m== %s ==\033[0m\n' "$*"; }
 have() { command -v "$1" >/dev/null 2>&1; }
