@@ -49,8 +49,8 @@ export TERMUX__PREFIX="$PREFIX"
 say "готовлю права и пользователя для контейнера"
 chmod -R a+rwX "$PKG" "$WORK" 2>/dev/null || true
 # На CI docker-userns не даёт builder(1001) писать в смонтированный каталог ->
-# итоговый mv zip падает. Гоним сборку внутри контейнера от root.
-export TERMUX_DOCKER_EXEC_EXTRA_ARGS="${TERMUX_DOCKER_EXEC_EXTRA_ARGS:---user root}"
+# итоговый mv zip падает. Гоним сборку от root, но с HOME builder (там NDK/SDK).
+export TERMUX_DOCKER_EXEC_EXTRA_ARGS="${TERMUX_DOCKER_EXEC_EXTRA_ARGS:---user root -e HOME=/home/builder}"
 
 # Набор предустановки. Без git/rsync: их зависимости (apr-util) сейчас не собираются
 # из-за 404 на исходнике, а labnet уже вложен в bootstrap — git на устройстве не нужен.
