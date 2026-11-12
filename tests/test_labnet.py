@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Xnode-sh — RED └•TEAM•┐ lab™
+import hashlib
 import json
 import socket
 import tempfile
@@ -14,6 +15,14 @@ from labnet.session import SessionError
 from labnet.store import Labnet
 
 PASSPHRASE = "сеть-лабы"
+
+
+def _listener():
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind(("127.0.0.1", 0))
+    sock.listen(1)
+    return sock, sock.getsockname()[1]
 
 
 class MeshTest(unittest.TestCase):
@@ -311,6 +320,70 @@ class SessionTest(unittest.TestCase):
         thread.join(timeout=5)
         listener.close()
         self.assertIn("server", errors)
+
+
+class ArkTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        base = Path(self.tmp.name)
+        self.share = base / "share"
+        key = crypto.derive_net_key(PASSPHRASE, "redlab")
+        self.a = Mesh(Labnet.create("freya", "redlab", self.share, root=base / "a"), key)
+        self.b = Mesh(Labnet.create("acer", "redlab", self.share, root=base / "b"), key)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_put_get_roundtrip(self):
+        src = Path(self.tmp.name) / "knowledge.txt"
+        src.write_bytes(b"water: boil 1 minute\n" * 1000)
+        manifest = self.a.ark.put_file(src, "survival-water")
+        out = Path(self.tmp.name) / "out.txt"
+        self.assertTrue(self.a.ark.get_file("survival-water", out))
+        self.assertEqual(out.read_bytes(), src.read_bytes())
+        self.assertTrue(manifest["chunks"])
+
+    def test_chunk_dedup(self):
+        data = b"same" * 100
+        first = self.a.ark.add_bytes(data)
+        second = self.a.ark.add_bytes(data)
+        self.assertEqual(first, second)
+
+    def test_reject_wrong_chunk(self):
+        sha = hashlib.sha256(b"real").hexdigest()
+        self.assertFalse(self.a.ark.add_chunk(sha, crypto.encrypt(self.a.net_key, b"fake", b"labnet-ark")))
+
+    def test_replication_over_session(self):
+        src = Path(self.tmp.name) / "map.txt"
+        src.write_bytes(b"north passage\n" * 500)
+        self.a.ark.put_file(src, "map")
+        listener, port = _listener()
+
+        def server():
+            sess = session.serve_once(listener, self.b, self.b.card())
+            sess.sync()
+            sess.close()
+
+        thread = threading.Thread(target=server)
+        thread.start()
+        sess = session.connect("127.0.0.1", port, self.a, self.a.card())
+        sess.sync()
+        sess.close()
+        thread.join(timeout=5)
+        listener.close()
+        self.assertTrue(self.b.ark.has_manifest("map"))
+        self.assertEqual(self.b.ark.missing(self.b.ark.manifest("map")), [])
+        out = Path(self.tmp.name) / "restored.txt"
+        self.assertTrue(self.b.ark.get_file("map", out))
+        self.assertEqual(out.read_bytes(), src.read_bytes())
+
+    def test_level_reflects_ark(self):
+        src = Path(self.tmp.name) / "big.bin"
+        src.write_bytes(b"x" * 2_000_000)
+        self.a.ark.put_file(src, "big")
+        card = self.a.card()
+        self.assertEqual(card["holdings"]["bytes"], 2_000_000)
+        self.assertEqual(card["level"], "Знаток")
 
 
 class CryptoTest(unittest.TestCase):

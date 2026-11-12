@@ -197,6 +197,33 @@ def cmd_connect(args) -> int:
     return 0
 
 
+def cmd_ark(args) -> int:
+    mesh = _mesh(args)
+    ark = mesh.ark
+    if args.action == "stats":
+        print(json.dumps(ark.stats(), ensure_ascii=False, indent=2))
+    elif args.action == "list":
+        for manifest in ark.manifests():
+            missing = len(ark.missing(manifest))
+            flag = "" if missing == 0 else f"  (нет {missing} чанков)"
+            print(f"{manifest['name']:<32} {manifest['size']:>10} B{flag}")
+    elif args.action == "put":
+        if not args.first:
+            raise LabnetError("нужен путь: ark put <file> [name]")
+        manifest = ark.put_file(Path(args.first), args.name or args.second)
+        print(f"в Ковчег: {manifest['name']}  ({len(manifest['chunks'])} чанков, {manifest['size']} B)")
+    elif args.action == "get":
+        name = args.name or args.first
+        if not name:
+            raise LabnetError("нужно имя: ark get <name> [out]")
+        ok = ark.get_file(name, Path(args.out or args.second or name))
+        print("извлечено" if ok else "нет такого файла или не хватает чанков")
+        return 0 if ok else 1
+    else:
+        raise LabnetError(f"неизвестное действие: {args.action}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="labnet", description="Приватная сеть поверх своего канала (без root)")
     parser.add_argument("--share", help="каталог-канал (по умолчанию из конфига)")
@@ -252,6 +279,14 @@ def build_parser() -> argparse.ArgumentParser:
     connect = sub.add_parser("connect", help="подключиться к узлу HOST[:PORT]")
     connect.add_argument("target")
     connect.set_defaults(func=cmd_connect)
+
+    ark = sub.add_parser("ark", help="Ковчег: обмен знаниями и файлами")
+    ark.add_argument("action", choices=["list", "stats", "put", "get"])
+    ark.add_argument("first", nargs="?")
+    ark.add_argument("second", nargs="?")
+    ark.add_argument("-n", "--name")
+    ark.add_argument("-o", "--out")
+    ark.set_defaults(func=cmd_ark)
 
     sub.add_parser("whoami", help="кто я").set_defaults(func=cmd_whoami)
     return parser

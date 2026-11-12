@@ -129,7 +129,46 @@ class Session:
                 result = self.mesh._handle(frame["envelope"])
                 if result["kind"] == "message":
                     messages.append(result["message"])
+        self.sync_ark()
         return messages
+
+    def sync_ark(self) -> int:
+        """Exchange knowledge: swap manifests, then pull missing chunks. Returns chunks gained."""
+        ark = self.mesh.ark
+        self._send({"t": "ark_manifests", "manifests": ark.manifests()})
+        frame = self._recv()
+        peer_manifests = frame.get("manifests", []) if frame.get("t") == "ark_manifests" else []
+        want: list[str] = []
+        for manifest in peer_manifests:
+            if manifest.get("name") and not ark.has_manifest(manifest["name"]):
+                ark.add_manifest(manifest)
+                want.extend(ark.missing(manifest))
+
+        self._send({"t": "ark_want", "hashes": want})
+        frame = self._recv()
+        their_want = frame.get("hashes", []) if frame.get("t") == "ark_want" else []
+
+        for sha in their_want:
+            blob = ark.chunk_blob(sha)
+            if blob is not None:
+                self._send({"t": "ark_chunk", "hash": sha, "data": crypto.b64e(blob)})
+            else:
+                self._send({"t": "ark_none", "hash": sha})
+
+        gained = 0
+        received = 0
+        while received < len(want):
+            frame = self._recv()
+            if frame.get("t") == "ark_chunk":
+                if ark.add_chunk(frame["hash"], crypto.b64d(frame["data"])):
+                    gained += 1
+            received += 1
+        self._send({"t": "ark_done"})
+        while True:
+            frame = self._recv()
+            if frame.get("t") == "ark_done":
+                break
+        return gained
 
     def close(self) -> None:
         try:

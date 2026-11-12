@@ -12,6 +12,7 @@ import socket
 import time
 
 from . import crypto, profile
+from .ark import ArkStore
 from .crypto import LabnetError
 from .queue import Outbox, Seen
 from .relay import DEFAULT_TTL, RelayStore, hop
@@ -29,9 +30,14 @@ class Mesh:
         self.outbox = Outbox(node.state / "outbox")
         self.relay = RelayStore(node.state / "relay")
         self.seen = Seen(node.state / "seen.txt")
+        self.ark = ArkStore(net_key, node.state / "ark")
 
     # --- roster ---------------------------------------------------------
     def card(self, holdings: dict | None = None, role: str = "node", caps: list[str] | None = None) -> dict:
+        if holdings is None:
+            stats = self.ark.stats()
+            holdings = {"topics": stats["files"], "docs": stats["files"],
+                        "chunks": stats["chunks"], "bytes": stats["bytes"]}
         return profile.build_card(self.node, holdings, role, caps)
 
     def announce(self) -> dict:
