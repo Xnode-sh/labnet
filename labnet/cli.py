@@ -168,8 +168,10 @@ def _greet(mesh, peer_id, peer_card, meet_status=None) -> None:
         pass
     nick = (peer_card or {}).get("nick", peer_id)
     level = (peer_card or {}).get("level", "?")
+    focus = (peer_card or {}).get("focus", "")
     suffix = f" · {label}" if label else ""
-    print(f"🤝 знакомство: {nick} · уровень {level}{suffix}")
+    skill = f" · спец: {focus}" if focus else ""
+    print(f"🤝 знакомство: {nick} · уровень {level}{skill}{suffix}")
 
 
 def cmd_listen(args) -> int:
@@ -365,7 +367,7 @@ def cmd_serve_ai(args) -> int:
         while True:
             for message in mesh.recv():
                 if message.get("type") == "ask":
-                    reply = ai.handle_ask(mesh.ark, message)
+                    reply = ai.handle_ask(mesh.ark, message, focus=mesh.node.focus)
                     mesh.send(message.get("from"), reply, kind="reply")
                     print(f"→ {message.get('from')}: {reply[:100]}")
                 elif message.get("type") in ("text", "reply"):
@@ -394,6 +396,16 @@ def cmd_key(args) -> int:
         print("есть" if store.load_passphrase() else "нет")
         return 0
     raise LabnetError(f"неизвестное действие: {args.action}")
+
+
+def cmd_focus(args) -> int:
+    node = Labnet.load(share=_share(args))
+    if args.value:
+        node.set_focus(" ".join(args.value))
+        print("специализация узла:", node.focus or "(сброшено)")
+    else:
+        print(node.focus or "(специализация не задана)")
+    return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -480,6 +492,10 @@ def build_parser() -> argparse.ArgumentParser:
     daemon.add_argument("--role", default="node")
     daemon.add_argument("--quiet", action="store_true")
     daemon.set_defaults(func=cmd_daemon)
+
+    focus = sub.add_parser("focus", help="специализация узла (чему он учит сеть)")
+    focus.add_argument("value", nargs="*")
+    focus.set_defaults(func=cmd_focus)
 
     pack = sub.add_parser("pack", help="собрать носитель (sneakernet)")
     pack.add_argument("out")

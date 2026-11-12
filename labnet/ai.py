@@ -70,13 +70,14 @@ def retrieve(ark, question: str, limit: int = 3) -> list[dict]:
     return [item[1] for item in scored[:limit]]
 
 
-def answer(ark, question: str, model: str = DEFAULT_MODEL, runner=None) -> dict:
+def answer(ark, question: str, model: str = DEFAULT_MODEL, runner=None, focus: str = "") -> dict:
     sources = retrieve(ark, question)
     if not sources:
         return {"text": "не знаю", "sources": [], "model": None}
     context = "\n\n".join(f"[{s['name']}]\n{s['snippet']}" for s in sources)[:MAX_CONTEXT_CHARS]
+    persona = PERSONA + (f"\nТвой узел специализируется на: {focus}." if focus else "")
     if provider_available():
-        prompt = f"{PERSONA}\n\nИсточники:\n{context}\n\nВопрос: {question}\nОтвет:"
+        prompt = f"{persona}\n\nИсточники:\n{context}\n\nВопрос: {question}\nОтвет:"
         reply = run_model(prompt, model, runner=runner)
         if reply:
             return {"text": reply, "sources": [s["name"] for s in sources], "model": model}
@@ -88,8 +89,8 @@ def answer(ark, question: str, model: str = DEFAULT_MODEL, runner=None) -> dict:
     }
 
 
-def handle_ask(ark, message: dict, model: str = DEFAULT_MODEL, runner=None) -> str:
-    return answer(ark, message.get("text", ""), model=model, runner=runner)["text"]
+def handle_ask(ark, message: dict, model: str = DEFAULT_MODEL, runner=None, focus: str = "") -> str:
+    return answer(ark, message.get("text", ""), model=model, runner=runner, focus=focus)["text"]
 
 
 def ask(mesh, peer: str, question: str, timeout: float = 10.0, interval: float = 0.5) -> dict | None:

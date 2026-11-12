@@ -45,7 +45,7 @@ class Mesh:
             stats = self.ark.stats()
             holdings = {"topics": stats["files"], "docs": stats["files"],
                         "chunks": stats["chunks"], "bytes": stats["bytes"]}
-        return profile.build_card(self.node, holdings, role, caps)
+        return profile.build_card(self.node, holdings, role, caps, focus=self.node.focus)
 
     def holdings(self) -> dict:
         stats = self.ark.stats()

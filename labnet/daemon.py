@@ -48,7 +48,7 @@ class Daemon:
     def _ingest(self, messages: list[dict]) -> int:
         for message in messages:
             if message.get("type") == "ask":
-                reply = ai.handle_ask(self.mesh.ark, message)
+                reply = ai.handle_ask(self.mesh.ark, message, focus=self.mesh.node.focus)
                 self.mesh.send(message.get("from"), reply, kind="reply")
                 self.chat.store.append(message.get("from_id") or message.get("from", "?"),
                                        "in", message.get("text", ""), message.get("ts"))

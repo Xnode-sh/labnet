@@ -202,12 +202,16 @@ class ProfileTest(unittest.TestCase):
     def test_card_roundtrip(self):
         tmp = tempfile.TemporaryDirectory()
         node = Labnet.create("freya", "redlab", Path(tmp.name) / "share", root=Path(tmp.name) / "n")
-        card = profile.build_card(node, role="engineering")
+        node.set_focus("вода и первая помощь")
+        card = profile.build_card(node, role="engineering", focus=node.focus)
         self.assertEqual(card["nick"], "freya")
         self.assertEqual(card["role"], "engineering")
+        self.assertEqual(card["focus"], "вода и первая помощь")
         self.assertTrue(profile.verify_card(card))
         tampered = dict(card, role="hacked")
         self.assertFalse(profile.verify_card(tampered))
+        reloaded = Labnet.load(root=Path(tmp.name) / "n")
+        self.assertEqual(reloaded.focus, "вода и первая помощь")
         tmp.cleanup()
 
 

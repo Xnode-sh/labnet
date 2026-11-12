@@ -32,7 +32,8 @@ def haptic_of(node_id: str) -> list[int]:
     return [80 + (digest[i] % 5) * 40 for i in range(3)]
 
 
-def build_card(node, holdings: dict | None = None, role: str = "node", caps: list[str] | None = None) -> dict:
+def build_card(node, holdings: dict | None = None, role: str = "node", caps: list[str] | None = None,
+               focus: str = "") -> dict:
     holdings = holdings or {"topics": 0, "docs": 0, "chunks": 0, "bytes": 0}
     card = {
         "v": CARD_VERSION,
@@ -40,6 +41,7 @@ def build_card(node, holdings: dict | None = None, role: str = "node", caps: lis
         "nick": node.name,
         "pub": node.identity.to_dict()["pub"],
         "role": role,
+        "focus": focus,
         "host": socket.gethostname(),
         "holdings": holdings,
         "level": compute_level(holdings),

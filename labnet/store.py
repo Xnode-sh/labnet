@@ -75,6 +75,14 @@ class Labnet:
         return self.config["node"]
 
     @property
+    def focus(self) -> str:
+        return self.config.get("focus", "")
+
+    def set_focus(self, text: str) -> None:
+        self.config["focus"] = text.strip()
+        self.save()
+
+    @property
     def node_id(self) -> str:
         return self.identity.node_id
 
