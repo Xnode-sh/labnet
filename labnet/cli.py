@@ -152,15 +152,20 @@ def cmd_discover(args) -> int:
     return 0
 
 
-def _greet(mesh, peer_id, peer_card) -> None:
+def _greet(mesh, peer_id, peer_card, meet_status=None) -> None:
     from . import feedback
+    label = {"new": "новый знакомый", "known": "свой", "changed": "⚠ ключ узла сменился"}.get(meet_status)
     try:
-        feedback.greeting(peer_id)
+        if meet_status in ("new", "changed"):
+            feedback.event("new_peer" if meet_status == "new" else "alert")
+        else:
+            feedback.greeting(peer_id)
     except Exception:
         pass
     nick = (peer_card or {}).get("nick", peer_id)
     level = (peer_card or {}).get("level", "?")
-    print(f"🤝 знакомство: {nick} · уровень {level}")
+    suffix = f" · {label}" if label else ""
+    print(f"🤝 знакомство: {nick} · уровень {level}{suffix}")
 
 
 def cmd_listen(args) -> int:
@@ -175,7 +180,7 @@ def cmd_listen(args) -> int:
     try:
         while True:
             sess = session.serve_once(listener, mesh, mesh.card())
-            _greet(mesh, sess.peer_id, sess.peer_card)
+            _greet(mesh, sess.peer_id, sess.peer_card, sess.meet_status)
             for message in sess.sync():
                 print(f"[{message['type']}] {message['from']}: {message['text']}")
             sess.close()
@@ -190,7 +195,7 @@ def cmd_connect(args) -> int:
     host, _, port = args.target.partition(":")
     mesh = _mesh(args)
     sess = session.connect(host, int(port or 47112), mesh, mesh.card())
-    _greet(mesh, sess.peer_id, sess.peer_card)
+    _greet(mesh, sess.peer_id, sess.peer_card, sess.meet_status)
     for message in sess.sync():
         print(f"[{message['type']}] {message['from']}: {message['text']}")
     sess.close()
@@ -280,6 +285,22 @@ def cmd_web(args) -> int:
         server.shutdown()
 
 
+def cmd_contacts(args) -> int:
+    mesh = _mesh(args)
+    contacts = mesh.contacts.all()
+    if args.json:
+        print(json.dumps(contacts, ensure_ascii=False, indent=2))
+        return 0
+    if not contacts:
+        print("(знакомых пока нет)")
+        return 0
+    width = max(len(c.get("name", "")) for c in contacts)
+    for c in contacts:
+        changed = "  ⚠ ключ сменился" if c.get("changed_at") else ""
+        print(f"{c.get('name', ''):<{width}}  {c['node_id']}  виделись {c.get('seen', 1)}  {c.get('level', '')}{changed}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="labnet", description="Приватная сеть поверх своего канала (без root)")
     parser.add_argument("--share", help="каталог-канал (по умолчанию из конфига)")
@@ -352,6 +373,10 @@ def build_parser() -> argparse.ArgumentParser:
     web.add_argument("--port", type=int, default=8787)
     web.add_argument("--no-open", action="store_true")
     web.set_defaults(func=cmd_web)
+
+    contacts = sub.add_parser("contacts", help="знакомые узлы (TOFU)")
+    contacts.add_argument("--json", action="store_true")
+    contacts.set_defaults(func=cmd_contacts)
 
     sub.add_parser("whoami", help="кто я").set_defaults(func=cmd_whoami)
     return parser

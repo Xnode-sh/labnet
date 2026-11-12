@@ -13,6 +13,7 @@ import time
 
 from . import crypto, profile
 from .ark import ArkStore
+from .contacts import ContactStore
 from .crypto import LabnetError
 from .queue import Outbox, Seen
 from .relay import DEFAULT_TTL, RelayStore, hop
@@ -31,6 +32,12 @@ class Mesh:
         self.relay = RelayStore(node.state / "relay")
         self.seen = Seen(node.state / "seen.txt")
         self.ark = ArkStore(net_key, node.state / "ark")
+        self.contacts = ContactStore(net_key, node.state / "contacts.json")
+
+    def meet(self, card: dict) -> tuple[str, dict]:
+        """Register a peer from its card (TOFU pinning). Returns (status, record)."""
+        return self.contacts.check(card.get("node_id", ""), card.get("nick", ""),
+                                   card.get("pub", ""), card.get("level", ""))
 
     # --- roster ---------------------------------------------------------
     def card(self, holdings: dict | None = None, role: str = "node", caps: list[str] | None = None) -> dict:

@@ -36,6 +36,13 @@ class Session:
         self.reader = sock.makefile("rb")
         self.peer_id = ""
         self.peer_card: dict | None = None
+        self.meet_status: str | None = None
+        self.peer_record: dict = {}
+
+    def _register(self) -> None:
+        if (self.peer_card and profile.verify_card(self.peer_card)
+                and self.peer_card.get("node_id") == self.peer_id):
+            self.meet_status, self.peer_record = self.mesh.meet(self.peer_card)
 
     def _send(self, frame: dict) -> None:
         self.sock.sendall((json.dumps(frame, ensure_ascii=False) + "\n").encode("utf-8"))
@@ -71,6 +78,7 @@ class Session:
             raise SessionError("ключ сети не совпал")
         self.peer_id = hello["node_id"]
         self.peer_card = ok.get("card")
+        self._register()
         return self.peer_card or {}
 
     def server_handshake(self, my_card: dict) -> dict:
@@ -92,6 +100,7 @@ class Session:
             raise SessionError("ключ сети не совпал")
         self.peer_id = hello["node_id"]
         self.peer_card = confirm.get("card")
+        self._register()
         self._send({"t": "ok", "mac": mac, "card": my_card})
         return self.peer_card or {}
 

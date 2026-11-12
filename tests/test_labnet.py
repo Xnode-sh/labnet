@@ -451,6 +451,34 @@ class ChatTest(unittest.TestCase):
         self.assertEqual(chat.store.history(self.b.node.node_id)[0]["text"], "веб")
 
 
+class ContactsTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        key = crypto.derive_net_key(PASSPHRASE, "redlab")
+        from labnet.contacts import ContactStore
+        self.store = ContactStore(key, Path(self.tmp.name) / "contacts.json")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_tofu_new_known_changed(self):
+        status, _ = self.store.check("n1", "freya", "PUB1", "Знаток")
+        self.assertEqual(status, "new")
+        status, record = self.store.check("n1", "freya", "PUB1")
+        self.assertEqual(status, "known")
+        self.assertEqual(record["seen"], 2)
+        status, record = self.store.check("n1", "freya", "PUB2")
+        self.assertEqual(status, "changed")
+        self.assertEqual(record["prev_pub"], "PUB1")
+
+    def test_file_encrypted(self):
+        import stat
+        self.store.check("n2", "лира", "PUBX")
+        raw = (Path(self.tmp.name) / "contacts.json").read_bytes()
+        self.assertNotIn(b"PUBX", raw)
+        self.assertEqual(stat.S_IMODE(os.stat(Path(self.tmp.name) / "contacts.json").st_mode), 0o600)
+
+
 class CryptoTest(unittest.TestCase):
     def test_net_key_deterministic(self):
         self.assertEqual(
