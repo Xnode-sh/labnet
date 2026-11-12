@@ -6,6 +6,7 @@ import os
 import socket
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 
@@ -477,6 +478,48 @@ class ContactsTest(unittest.TestCase):
         raw = (Path(self.tmp.name) / "contacts.json").read_bytes()
         self.assertNotIn(b"PUBX", raw)
         self.assertEqual(stat.S_IMODE(os.stat(Path(self.tmp.name) / "contacts.json").st_mode), 0o600)
+
+
+class DaemonTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        base = Path(self.tmp.name)
+        self.share = base / "share"
+        key = crypto.derive_net_key(PASSPHRASE, "redlab")
+        self.a = Mesh(Labnet.create("freya", "redlab", self.share, root=base / "a"), key)
+        self.b = Mesh(Labnet.create("acer", "redlab", self.share, root=base / "b"), key)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_accept_session_and_ingest(self):
+        from labnet.daemon import Daemon
+        self.a.announce()
+        self.b.announce()
+        self.a.send("acer", "демон жив")
+        daemon = Daemon(self.b, tcp_port=0, udp_port=0, interval=0.1, quiet=True, role="engineering")
+        port = daemon.listener.getsockname()[1]
+
+        def client():
+            sess = session.connect("127.0.0.1", port, self.a, self.a.card())
+            sess.sync()
+            sess.close()
+
+        thread = threading.Thread(target=client)
+        thread.start()
+        accepted = 0
+        for _ in range(50):
+            accepted = daemon._accept_one()
+            if accepted:
+                break
+            time.sleep(0.1)
+        thread.join(timeout=5)
+        daemon.udp.close()
+        daemon.listener.close()
+        self.assertEqual(accepted, 1)
+        history = daemon.chat.store.history(self.a.node.node_id)
+        self.assertEqual(history[0]["text"], "демон жив")
+        self.assertEqual(history[0]["dir"], "in")
 
 
 class CryptoTest(unittest.TestCase):

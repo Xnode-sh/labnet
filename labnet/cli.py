@@ -301,6 +301,16 @@ def cmd_contacts(args) -> int:
     return 0
 
 
+def cmd_daemon(args) -> int:
+    from .daemon import Daemon
+    mesh = _mesh(args)
+    daemon = Daemon(mesh, tcp_port=args.tcp_port, udp_port=args.udp_port,
+                    interval=args.interval, role=args.role, quiet=args.quiet)
+    print(f"labnet демон: сеть {mesh.node.net}, порт сессий {args.tcp_port}, интервал {args.interval}s")
+    daemon.run()
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="labnet", description="Приватная сеть поверх своего канала (без root)")
     parser.add_argument("--share", help="каталог-канал (по умолчанию из конфига)")
@@ -377,6 +387,14 @@ def build_parser() -> argparse.ArgumentParser:
     contacts = sub.add_parser("contacts", help="знакомые узлы (TOFU)")
     contacts.add_argument("--json", action="store_true")
     contacts.set_defaults(func=cmd_contacts)
+
+    daemon = sub.add_parser("daemon", help="фоновый режим: искать, знакомить, синкать")
+    daemon.add_argument("--tcp-port", type=int, default=47112)
+    daemon.add_argument("--udp-port", type=int, default=47111)
+    daemon.add_argument("--interval", type=float, default=20.0)
+    daemon.add_argument("--role", default="node")
+    daemon.add_argument("--quiet", action="store_true")
+    daemon.set_defaults(func=cmd_daemon)
 
     sub.add_parser("whoami", help="кто я").set_defaults(func=cmd_whoami)
     return parser

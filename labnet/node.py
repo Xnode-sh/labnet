@@ -47,6 +47,11 @@ class Mesh:
                         "chunks": stats["chunks"], "bytes": stats["bytes"]}
         return profile.build_card(self.node, holdings, role, caps)
 
+    def holdings(self) -> dict:
+        stats = self.ark.stats()
+        return {"topics": stats["files"], "docs": stats["files"],
+                "chunks": stats["chunks"], "bytes": stats["bytes"]}
+
     def announce(self) -> dict:
         entry = {
             "v": PROTOCOL,
