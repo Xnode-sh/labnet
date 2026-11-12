@@ -420,9 +420,10 @@ def cmd_asknet(args) -> int:
         return 1
     print(f"❓ {result['question']}")
     for answer in result["answers"]:
-        star = "⭐ знает" if answer["score"] > 0 else "·"
+        star = "⭐ знает" if answer["useful"] else "·"
         spec = f" · спец: {answer['focus']}" if answer["focus"] else ""
-        print(f"\n{star}  {answer['from']}{spec}\n   {answer['text']}")
+        rep = f" · доверие {answer['rep']}" if answer["rep"] else ""
+        print(f"\n{star}  {answer['from']}{spec}{rep}\n   {answer['text']}")
     return 0
 
 
@@ -455,10 +456,41 @@ def cmd_map(args) -> int:
         line = f"{mark} {peer['name']:<14} {D}{peer['node_id']}{R}"
         if focus:
             line += f"  {Y}{focus}{R}"
+        rep = int(card.get("rep", 0))
+        if rep:
+            line += f"  {G}{'★' * min(rep, 5)}{R}"
         if seen:
             line += f"  {D}виделись {seen}{R}"
         print(f"{C}║{R} {line}")
     print(f"{C}╚{'═' * 54}╝{R}")
+    return 0
+
+
+def cmd_rep(args) -> int:
+    mesh = _mesh(args)
+    rows = mesh.contacts.ranked()
+    if not rows:
+        print("(знакомых пока нет)")
+        return 0
+    for record in rows:
+        stars = "★" * min(int(record.get("rep", 0)), 5)
+        focus = f"  {record.get('focus', '')}" if record.get("focus") else ""
+        print(f"{stars:<5} {record.get('name', ''):<16} доверие {int(record.get('rep', 0)):>3}{focus}")
+    return 0
+
+
+def cmd_rate(args) -> int:
+    mesh = _mesh(args)
+    target = args.node
+    node_id = target
+    for record in mesh.contacts.all():
+        if record.get("name") == target or record["node_id"] == target:
+            node_id = record["node_id"]
+            break
+    new = mesh.contacts.bump(node_id, args.amount)
+    if new == 0 and not any(r["node_id"] == node_id for r in mesh.contacts.all()):
+        raise LabnetError(f"не знаю такого узла: {target}")
+    print(f"доверие {target}: {new}")
     return 0
 
 
@@ -558,6 +590,13 @@ def build_parser() -> argparse.ArgumentParser:
     asknet.set_defaults(func=cmd_asknet)
 
     sub.add_parser("map", help="карта сети: узлы, специализации, знания").set_defaults(func=cmd_map)
+
+    sub.add_parser("rep", help="репутация знакомых узлов").set_defaults(func=cmd_rep)
+
+    rate = sub.add_parser("rate", help="оценить узел (доверие)")
+    rate.add_argument("node")
+    rate.add_argument("amount", type=int, nargs="?", default=1)
+    rate.set_defaults(func=cmd_rate)
 
     pack = sub.add_parser("pack", help="собрать носитель (sneakernet)")
     pack.add_argument("out")

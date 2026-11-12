@@ -109,11 +109,11 @@ def _focus_score(question: str, focus: str) -> int:
     return len(_keywords(question) & _keywords(focus))
 
 
-def asknet(mesh, question: str, timeout: float = 12.0, interval: float = 0.5) -> dict:
-    """Ask the whole network; rank answers by how well the responder's focus matches."""
+def asknet(mesh, question: str, timeout: float = 12.0, interval: float = 0.5, reward: bool = True) -> dict:
+    """Ask the whole network; rank answers by focus match + reputation. Reward helpful nodes."""
     peers = [p for p in mesh.peers() if not p["self"]]
     mesh.send("all", question, kind="ask")
-    focus_by_id = {c["node_id"]: c.get("focus", "") for c in mesh.contacts.all()}
+    cards = {c["node_id"]: c for c in mesh.contacts.all()}
     answers: dict[str, dict] = {}
     start = time.time()
     while time.time() - start < timeout:
@@ -125,13 +125,21 @@ def asknet(mesh, question: str, timeout: float = 12.0, interval: float = 0.5) ->
         time.sleep(interval)
     ranked = []
     for node_id, message in answers.items():
-        card_focus = focus_by_id.get(node_id, "")
+        card = cards.get(node_id, {})
+        text = message.get("text", "")
+        useful = bool(text) and "не знаю" not in text.lower()
+        score = _focus_score(question, card.get("focus", "")) * 3
+        score += min(int(card.get("rep", 0)), 8)
+        score += 1 if useful else 0
         ranked.append({
-            "from": message.get("from"),
-            "from_id": node_id,
-            "focus": card_focus,
-            "score": _focus_score(question, card_focus),
-            "text": message.get("text", ""),
+            "from": message.get("from"), "from_id": node_id,
+            "focus": card.get("focus", ""), "rep": int(card.get("rep", 0)),
+            "useful": useful, "score": score, "text": text,
         })
     ranked.sort(key=lambda a: a["score"], reverse=True)
+    if reward and ranked:
+        for index, answer in enumerate(ranked):
+            if not answer["useful"]:
+                continue
+            mesh.contacts.bump(answer["from_id"], 2 if index == 0 else 1)
     return {"question": question, "asked": len(peers), "answers": ranked}

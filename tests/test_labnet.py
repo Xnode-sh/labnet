@@ -476,6 +476,16 @@ class ContactsTest(unittest.TestCase):
         self.assertEqual(status, "changed")
         self.assertEqual(record["prev_pub"], "PUB1")
 
+    def test_reputation(self):
+        self.store.check("n1", "freya", "PUB1")
+        self.store.check("n2", "lira", "PUB2")
+        self.assertEqual(self.store.reputation("n1"), 0)
+        self.store.bump("n1", 3)
+        self.store.bump("n1")
+        self.assertEqual(self.store.reputation("n1"), 4)
+        self.assertEqual(self.store.ranked()[0]["name"], "freya")
+        self.assertEqual(self.store.bump("нет", 1), 0)
+
     def test_file_encrypted(self):
         import stat
         self.store.check("n2", "лира", "PUBX")
@@ -636,6 +646,24 @@ class AiTest(unittest.TestCase):
         result = ai.asknet(self.a, "как наложить жгут при кровотечении", timeout=0.5)
         self.assertEqual(result["answers"][0]["from"], "acer")
         self.assertGreater(result["answers"][0]["score"], 0)
+
+
+    def test_reputation_rewards_helpers(self):
+        from labnet import ai
+        self.a.announce()
+        self.b.announce()
+        doc = Path(self.tmp.name) / "med.txt"
+        doc.write_text("жгут выше раны", encoding="utf-8")
+        self.b.ark.put_file(doc, "med", by="acer")
+        self.a.contacts.check(self.b.node.node_id, "acer", "PUB", "Знаток", "жгут кровотечение")
+        self.a.send("all", "как наложить жгут", kind="ask")
+        for message in self.b.recv():
+            if message["type"] == "ask":
+                self.b.send(message["from"], ai.handle_ask(self.b.ark, message), kind="reply")
+        before = self.a.contacts.reputation(self.b.node.node_id)
+        ai.asknet(self.a, "как наложить жгут", timeout=0.5)
+        after = self.a.contacts.reputation(self.b.node.node_id)
+        self.assertGreater(after, before)
 
 
 class CryptoTest(unittest.TestCase):
