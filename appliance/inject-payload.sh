@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Xnode-sh — RED └•TEAM•┐ lab™
+# Вкладывает labnet (код, набор выживания, промпт ИИ, установщик) в bootstrap-zip.
+# Использует python3 (zipfile) — работает и без пакета zip, сохраняет права на файлы.
+set -euo pipefail
+
+BOOT="$1"; PREFIX="$2"; SRCDIR="$3"
+[ -f "$BOOT" ] || { echo "нет bootstrap: $BOOT"; exit 1; }
+command -v python3 >/dev/null || { echo "нужен python3"; exit 1; }
+
+python3 - "$BOOT" "$PREFIX" "$SRCDIR" <<'PY'
+import os, stat, sys, zipfile
+
+boot, prefix, srcdir = sys.argv[1:4]
+items = ["labnet", "install", "seed", "docs"]
+
+
+def add_file(zf, arc, data, mode=0o644):
+    zi = zipfile.ZipInfo(arc)
+    zi.external_attr = (mode & 0xFFFF) << 16
+    zi.date_time = (2026, 1, 1, 0, 0, 0)
+    zf.writestr(zi, data)
+
+
+def add_tree(zf, path, arc):
+    if os.path.isdir(path):
+        for root, _dirs, files in os.walk(path):
+            if "__pycache__" in root:
+                continue
+            for name in files:
+                full = os.path.join(root, name)
+                rel = os.path.relpath(full, path)
+                add_file(zf, f"{arc}/{rel}".replace(os.sep, "/"), open(full, "rb").read())
+    else:
+        add_file(zf, arc, open(path, "rb").read())
+
+
+src = zipfile.ZipFile(boot)
+out = zipfile.ZipFile(boot + ".new", "w", zipfile.ZIP_DEFLATED)
+for zi in src.infolist():
+    out.writestr(zi, src.read(zi.filename))
+src.close()
+
+base = "usr/share/labnet"
+for item in items:
+    path = os.path.join(srcdir, item)
+    if os.path.exists(path):
+        add_tree(out, path, f"{base}/{item}")
+
+# entrypoint под реальный префикс
+entry = os.path.join(srcdir, "labnet.py")
+data = open(entry, "rb").read().split(b"\n", 1)
+add_file(out, f"{base}/labnet.py", f"#!{prefix}/bin/python3\n".encode() + data[1], 0o755)
+
+add_file(out, "usr/bin/labnet-setup",
+         f'#!{prefix}/bin/bash\nexec bash "{prefix}/share/labnet/install/install.sh" "$@"\n'.encode(),
+         0o755)
+out.close()
+os.replace(boot + ".new", boot)
+
+check = zipfile.ZipFile(boot)
+joined = b"".join(check.read(n) for n in check.namelist() if not n.startswith(base))
+if b"com.termux" in joined:
+    print("  ⚠ в bootstrap всё ещё есть префикс com.termux — проверь сборку")
+else:
+    print("  payload вложен, чужого префикса нет")
+print(f"  добавлено: {base} (сеть, Ковчег, seed, install) + usr/bin/labnet-setup")
+PY

@@ -28,6 +28,14 @@ bash install/install.sh        # остальная настройка
 
 ## Уровень 3 — APK, вмещающий Termux (форк) — путь сборки
 
+Автоматизировано в `appliance/` (запускать на Linux с Docker):
+
+```bash
+bash appliance/build-bootstrap.sh   # клонирует termux-packages, собирает bootstrap
+                                    # и вкладывает labnet + seed + промпт + установщик
+bash appliance/APK.md               # дальнейшие шаги (форк termux-app → APK)
+```
+
 Это полный «инсталлер, который несёт Termux внутри». Опирается на форк лабы `red-term`
 (см. его `docs/F0-bootstrap.md`). Сборка выполняется **на компьютере с Docker**, не на телефоне.
 
