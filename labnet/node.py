@@ -11,7 +11,7 @@ import json
 import socket
 import time
 
-from . import crypto
+from . import crypto, profile
 from .crypto import LabnetError
 from .queue import Outbox, Seen
 from .relay import DEFAULT_TTL, RelayStore, hop
@@ -31,6 +31,9 @@ class Mesh:
         self.seen = Seen(node.state / "seen.txt")
 
     # --- roster ---------------------------------------------------------
+    def card(self, holdings: dict | None = None, role: str = "node", caps: list[str] | None = None) -> dict:
+        return profile.build_card(self.node, holdings, role, caps)
+
     def announce(self) -> dict:
         entry = {
             "v": PROTOCOL,
@@ -136,37 +139,46 @@ class Mesh:
             return
         self.transport.deliver(to_id, self._seal(to_id, self._payload("ack", "", ack_id=ack_id), ttl=1))
 
+    def _handle(self, envelope: dict) -> dict:
+        """Central inbox logic shared by directory and live-session transports."""
+        if not self.seen.is_new(envelope.get("id", "")):
+            return {"kind": "skip"}
+        if envelope.get("to_id") != self.node.node_id:
+            if int(envelope.get("ttl", 0)) > 0:
+                return {"kind": "relay", "envelope": hop(envelope, self.node.node_id)}
+            return {"kind": "skip"}
+        try:
+            message = self._open(envelope)
+        except LabnetError as exc:
+            return {"kind": "message", "message": {
+                "from": envelope.get("from", "?"), "type": "error", "text": str(exc),
+                "ts": envelope.get("ts", 0)}}
+        if message["type"] == "ack":
+            self.outbox.mark_done(message["ack_id"])
+            return {"kind": "skip"}
+        ack = None
+        if message["id"]:
+            ack = self._seal(message["from_id"], self._payload("ack", "", ack_id=message["id"]), ttl=1)
+        return {"kind": "message", "message": message, "ack": ack}
+
     def recv(self) -> list[dict]:
         """Process everything queued: ack own outbox, relay foreign envelopes, return new messages."""
-        acked = 0
         messages: list[dict] = []
         for path, envelope in self.transport.collect(self.node.node_id):
             self.transport.ack(path)
-            env_id = envelope.get("id", "")
-            if not self.seen.is_new(env_id):
-                continue
-            if envelope.get("to_id") != self.node.node_id:
-                if int(envelope.get("ttl", 0)) > 0:
-                    self.relay.accept(hop(envelope, self.node.node_id))
-                continue
-            try:
-                message = self._open(envelope)
-            except LabnetError as exc:
-                messages.append({"from": envelope.get("from", "?"), "type": "error",
-                                 "text": str(exc), "ts": envelope.get("ts", 0)})
-                continue
-            if message["type"] == "ack":
-                if self.outbox.mark_done(message["ack_id"]):
-                    acked += 1
-                continue
-            try:
-                self._ack(message["from_id"], message["id"])
-            except OSError:
-                pass
-            messages.append(message)
+            result = self._handle(envelope)
+            if result["kind"] == "relay":
+                self.relay.accept(result["envelope"])
+            elif result["kind"] == "message":
+                ack = result.get("ack")
+                if ack:
+                    try:
+                        self.transport.deliver(ack["to_id"], ack)
+                    except OSError:
+                        pass
+                messages.append(result["message"])
         self.forward()
         self.redeliver()
-        self._last_acked = acked
         return messages
 
     def forward(self) -> int:

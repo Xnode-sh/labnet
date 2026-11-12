@@ -128,6 +128,75 @@ def cmd_whoami(args) -> int:
     return 0
 
 
+def cmd_card(args) -> int:
+    mesh = _mesh(args)
+    card = mesh.card(role=args.role)
+    print(json.dumps(card, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_discover(args) -> int:
+    from . import discovery
+    mesh = _mesh(args)
+    sock = discovery.open_socket(args.port)
+    disc = discovery.Discovery(mesh, args.tcp_port, args.port)
+    try:
+        disc.announce(sock)
+        found = disc.listen_once(sock, timeout=args.seconds)
+    finally:
+        sock.close()
+    for beacon in found:
+        print(f"{beacon['addr']}:{beacon['tcp_port']}  {beacon['node_id']}  ({beacon['nonce'][:8]})")
+    if not found:
+        print("(никого рядом)")
+    return 0
+
+
+def _greet(mesh, peer_id, peer_card) -> None:
+    from . import feedback
+    try:
+        feedback.greeting(peer_id)
+    except Exception:
+        pass
+    nick = (peer_card or {}).get("nick", peer_id)
+    level = (peer_card or {}).get("level", "?")
+    print(f"🤝 знакомство: {nick} · уровень {level}")
+
+
+def cmd_listen(args) -> int:
+    import socket
+    from . import session
+    mesh = _mesh(args)
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    listener.bind(("0.0.0.0", args.port))
+    listener.listen(4)
+    print(f"слушаю сессии на порту {args.port} (Ctrl-C для выхода)")
+    try:
+        while True:
+            sess = session.serve_once(listener, mesh, mesh.card())
+            _greet(mesh, sess.peer_id, sess.peer_card)
+            for message in sess.sync():
+                print(f"[{message['type']}] {message['from']}: {message['text']}")
+            sess.close()
+    except KeyboardInterrupt:
+        return 0
+    finally:
+        listener.close()
+
+
+def cmd_connect(args) -> int:
+    from . import session
+    host, _, port = args.target.partition(":")
+    mesh = _mesh(args)
+    sess = session.connect(host, int(port or 47112), mesh, mesh.card())
+    _greet(mesh, sess.peer_id, sess.peer_card)
+    for message in sess.sync():
+        print(f"[{message['type']}] {message['from']}: {message['text']}")
+    sess.close()
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="labnet", description="Приватная сеть поверх своего канала (без root)")
     parser.add_argument("--share", help="каталог-канал (по умолчанию из конфига)")
@@ -165,6 +234,24 @@ def build_parser() -> argparse.ArgumentParser:
     queue.set_defaults(func=cmd_queue)
 
     sub.add_parser("flush", help="повторить отправку и пересылку").set_defaults(func=cmd_flush)
+
+    card = sub.add_parser("card", help="показать свою визитку")
+    card.add_argument("--role", default="node")
+    card.set_defaults(func=cmd_card)
+
+    discover = sub.add_parser("discover", help="поискать узлы в локальной сети")
+    discover.add_argument("--seconds", type=float, default=3.0)
+    discover.add_argument("--port", type=int, default=47111)
+    discover.add_argument("--tcp-port", type=int, default=47112)
+    discover.set_defaults(func=cmd_discover)
+
+    listen = sub.add_parser("listen", help="принимать сессии")
+    listen.add_argument("--port", type=int, default=47112)
+    listen.set_defaults(func=cmd_listen)
+
+    connect = sub.add_parser("connect", help="подключиться к узлу HOST[:PORT]")
+    connect.add_argument("target")
+    connect.set_defaults(func=cmd_connect)
 
     sub.add_parser("whoami", help="кто я").set_defaults(func=cmd_whoami)
     return parser
