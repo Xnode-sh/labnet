@@ -19,11 +19,17 @@ if ! have termux-notification; then
   echo "  Приложение Termux:API ставится из F-Droid; затем: pkg install termux-api"
 fi
 
-# --- 2. узел сети -------------------------------------------------------
-if [ -z "${LABNET_PASSPHRASE:-}" ]; then
-  printf 'Придумай пароль сети (одинаковый на всех устройствах, не показывается): '
-  read -rs LABNET_PASSPHRASE; echo
-  export LABNET_PASSPHRASE
+# --- 2. ключ сети и узел -------------------------------------------------
+if [ -z "${LABNET_PASSPHRASE:-}" ] && [ ! -f "$HOME/.config/labnet/net.pass" ]; then
+  if [ -t 0 ]; then
+    printf 'Придумай пароль сети (одинаковый на всех устройствах, не показывается): '
+    read -rs LABNET_PASSPHRASE; echo
+    python3 "$HERE/labnet.py" key set "$LABNET_PASSPHRASE"
+  else
+    say "нет ввода — генерирую пароль сети (скопируй net.pass на другие узлы)"
+    python3 "$HERE/labnet.py" key set
+  fi
+  unset LABNET_PASSPHRASE
 fi
 name="${LABNET_NAME:-$(cat /proc/sys/kernel/hostname 2>/dev/null || echo node)}"
 net="${LABNET_NET:-redlab}"

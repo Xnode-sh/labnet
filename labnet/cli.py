@@ -11,7 +11,7 @@ import os
 import sys
 from pathlib import Path
 
-from . import crypto
+from . import crypto, store
 from .crypto import LabnetError
 from .node import Mesh
 from .store import Labnet, config_root
@@ -21,8 +21,11 @@ def read_passphrase(prompt: str = "Пароль сети labnet: ") -> str:
     env = os.environ.get("LABNET_PASSPHRASE")
     if env is not None:
         return env
+    stored = store.load_passphrase()
+    if stored is not None:
+        return stored
     if not sys.stdin.isatty():
-        raise LabnetError("нет tty: задай LABNET_PASSPHRASE")
+        raise LabnetError("нет tty: задай LABNET_PASSPHRASE или `labnet key set`")
     return getpass.getpass(prompt)
 
 
@@ -374,6 +377,25 @@ def cmd_serve_ai(args) -> int:
         return 0
 
 
+def cmd_key(args) -> int:
+    import secrets
+    from .store import keyring_path, save_passphrase
+    if args.action == "set":
+        passphrase = args.value or secrets.token_urlsafe(24)
+        path = save_passphrase(passphrase)
+        print(f"пароль сети сохранён (600): {path}")
+        if not args.value:
+            print("сгенерирован случайный пароль — скопируй net.pass на другие узлы, иначе они не зайдут")
+        return 0
+    if args.action == "where":
+        print(keyring_path())
+        return 0
+    if args.action == "has":
+        print("есть" if store.load_passphrase() else "нет")
+        return 0
+    raise LabnetError(f"неизвестное действие: {args.action}")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="labnet", description="Приватная сеть поверх своего канала (без root)")
     parser.add_argument("--share", help="каталог-канал (по умолчанию из конфига)")
@@ -478,6 +500,11 @@ def build_parser() -> argparse.ArgumentParser:
     ask.set_defaults(func=cmd_ask)
 
     sub.add_parser("serve-ai", help="отвечать на вопросы (ИИ/Ковчег)").set_defaults(func=cmd_serve_ai)
+
+    key = sub.add_parser("key", help="ключ сети (автономный режим)")
+    key.add_argument("action", choices=["set", "where", "has"])
+    key.add_argument("value", nargs="?")
+    key.set_defaults(func=cmd_key)
 
     sub.add_parser("whoami", help="кто я").set_defaults(func=cmd_whoami)
     return parser

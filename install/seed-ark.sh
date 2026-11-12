@@ -5,8 +5,8 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-if [ -z "${LABNET_PASSPHRASE:-}" ]; then
-  printf 'Пароль сети labnet: '; read -rs LABNET_PASSPHRASE; echo; export LABNET_PASSPHRASE
+if [ -z "${LABNET_PASSPHRASE:-}" ] && [ ! -f "$HOME/.config/labnet/net.pass" ]; then
+  echo "нет ключа сети: сначала 'labnet key set' или задай LABNET_PASSPHRASE"; exit 1
 fi
 
 for file in "$HERE"/seed/*.md; do

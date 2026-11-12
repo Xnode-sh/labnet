@@ -20,6 +20,29 @@ def config_root() -> Path:
     return Path(base) / "labnet"
 
 
+def keyring_path() -> Path:
+    """Локальный файл с паролем сети (600) — для автономной работы демона."""
+    return config_root() / "net.pass"
+
+
+def load_passphrase() -> str | None:
+    env = os.environ.get("LABNET_PASSPHRASE")
+    if env:
+        return env
+    path = keyring_path()
+    if path.is_file():
+        value = path.read_text(encoding="utf-8").strip()
+        if value:
+            return value
+    return None
+
+
+def save_passphrase(passphrase: str) -> Path:
+    path = keyring_path()
+    _write_private(path, passphrase.encode("utf-8"))
+    return path
+
+
 def _write_private(path: Path, data: bytes) -> None:
     path.parent.mkdir(mode=DIR_MODE, parents=True, exist_ok=True)
     os.chmod(path.parent, DIR_MODE)
