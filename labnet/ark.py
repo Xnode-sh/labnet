@@ -74,7 +74,7 @@ class ArkStore:
         return crypto.decrypt(self.net_key, blob, AAD)
 
     # --- files / manifests ----------------------------------------------
-    def put_file(self, source: Path, name: str | None = None) -> dict:
+    def put_file(self, source: Path, name: str | None = None, by: str = "", topic: str = "") -> dict:
         data = Path(source).read_bytes()
         chunks = []
         for offset in range(0, len(data), CHUNK_SIZE):
@@ -86,9 +86,18 @@ class ArkStore:
             "sha256": hashlib.sha256(data).hexdigest(),
             "chunk_size": CHUNK_SIZE,
             "chunks": chunks,
+            "by": by,
+            "topic": topic,
             "ts": int(time.time()),
         }
         self.add_manifest(manifest)
+        return manifest
+
+    def put_text(self, text: str, name: str, by: str = "", topic: str = "") -> dict:
+        tmp = self.path / "_pending.txt"
+        _atomic(tmp, text.encode("utf-8"))
+        manifest = self.put_file(tmp, name, by=by, topic=topic)
+        tmp.unlink(missing_ok=True)
         return manifest
 
     def add_manifest(self, manifest: dict) -> None:

@@ -614,6 +614,30 @@ class AiTest(unittest.TestCase):
         self.assertIn("water", replies[0]["text"].lower() + "water")
 
 
+    def test_manifest_provenance(self):
+        doc = Path(self.tmp.name) / "water.txt"
+        doc.write_text("кипятить воду", encoding="utf-8")
+        manifest = self.a.ark.put_file(doc, "water", by="freya", topic="вода")
+        self.assertEqual(manifest["by"], "freya")
+        self.assertEqual(manifest["topic"], "вода")
+
+    def test_asknet_ranks_by_focus(self):
+        from labnet import ai
+        self.a.announce()
+        self.b.announce()
+        doc = Path(self.tmp.name) / "med.txt"
+        doc.write_text("жгут накладывают выше раны", encoding="utf-8")
+        self.b.ark.put_file(doc, "med", by="acer")
+        self.a.contacts.check(self.b.node.node_id, "acer", "PUB", "Знаток", "жгут кровотечение первая помощь")
+        self.a.send("all", "как наложить жгут при кровотечении", kind="ask")
+        for message in self.b.recv():
+            if message["type"] == "ask":
+                self.b.send(message["from"], ai.handle_ask(self.b.ark, message), kind="reply")
+        result = ai.asknet(self.a, "как наложить жгут при кровотечении", timeout=0.5)
+        self.assertEqual(result["answers"][0]["from"], "acer")
+        self.assertGreater(result["answers"][0]["score"], 0)
+
+
 class CryptoTest(unittest.TestCase):
     def test_net_key_deterministic(self):
         self.assertEqual(

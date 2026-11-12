@@ -217,11 +217,14 @@ def cmd_ark(args) -> int:
         for manifest in ark.manifests():
             missing = len(ark.missing(manifest))
             flag = "" if missing == 0 else f"  (нет {missing} чанков)"
-            print(f"{manifest['name']:<32} {manifest['size']:>10} B{flag}")
+            by = f"  {manifest.get('by')}" if manifest.get("by") else ""
+            topic = f"  #{manifest['topic']}" if manifest.get("topic") else ""
+            print(f"{manifest['name']:<32} {manifest['size']:>10} B{by}{topic}{flag}")
     elif args.action == "put":
         if not args.first:
             raise LabnetError("нужен путь: ark put <file> [name]")
-        manifest = ark.put_file(Path(args.first), args.name or args.second)
+        manifest = ark.put_file(Path(args.first), args.name or args.second, by=mesh.node.name,
+                                topic=(args.topic or ""))
         print(f"в Ковчег: {manifest['name']}  ({len(manifest['chunks'])} чанков, {manifest['size']} B)")
     elif args.action == "get":
         name = args.name or args.first
@@ -408,6 +411,57 @@ def cmd_focus(args) -> int:
     return 0
 
 
+def cmd_asknet(args) -> int:
+    from . import ai
+    mesh = _mesh(args)
+    result = ai.asknet(mesh, " ".join(args.text), timeout=args.timeout)
+    if not result["answers"]:
+        print(f"ответов нет (спросили узлов: {result['asked']})")
+        return 1
+    print(f"❓ {result['question']}")
+    for answer in result["answers"]:
+        star = "⭐ знает" if answer["score"] > 0 else "·"
+        spec = f" · спец: {answer['focus']}" if answer["focus"] else ""
+        print(f"\n{star}  {answer['from']}{spec}\n   {answer['text']}")
+    return 0
+
+
+def cmd_map(args) -> int:
+    mesh = _mesh(args)
+    node = mesh.node
+    contacts = {c["node_id"]: c for c in mesh.contacts.all()}
+    B = "\033[1m"
+    D = "\033[2m"
+    C = "\033[36m"
+    G = "\033[32m"
+    Y = "\033[33m"
+    R = "\033[0m"
+    stats = mesh.ark.stats()
+    print(f"{C}╔═ СЕТЬ · {node.net} {'═' * max(1, 44 - len(node.net))}╗{R}")
+    me_focus = node.focus or "—"
+    print(f"{C}║{R} {G}● {node.name}{R}  {D}{node.node_id}{R}")
+    print(f"{C}║{R}   специализация: {Y}{me_focus}{R}")
+    print(f"{C}║{R}   знания: {stats['files']} записей · {stats['chunks']} чанков · {stats['bytes']} Б")
+    print(f"{C}║{R}   queue: {mesh.outbox.size()} · relay: {mesh.relay.size()}")
+    peers = [p for p in mesh.peers() if not p["self"]]
+    print(f"{C}╠═ узлы рядом ({len(peers)}) {'═' * 32}╣{R}")
+    if not peers:
+        print(f"{C}║{R}   {D}пока никого — запусти демон или поднеси носитель{R}")
+    for peer in peers:
+        card = contacts.get(peer["node_id"], {})
+        focus = card.get("focus", "")
+        seen = card.get("seen", 0)
+        mark = G + "●" + R if peer["age"] < 300 else Y + "◐" + R
+        line = f"{mark} {peer['name']:<14} {D}{peer['node_id']}{R}"
+        if focus:
+            line += f"  {Y}{focus}{R}"
+        if seen:
+            line += f"  {D}виделись {seen}{R}"
+        print(f"{C}║{R} {line}")
+    print(f"{C}╚{'═' * 54}╝{R}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="labnet", description="Приватная сеть поверх своего канала (без root)")
     parser.add_argument("--share", help="каталог-канал (по умолчанию из конфига)")
@@ -470,6 +524,7 @@ def build_parser() -> argparse.ArgumentParser:
     ark.add_argument("second", nargs="?")
     ark.add_argument("-n", "--name")
     ark.add_argument("-o", "--out")
+    ark.add_argument("-t", "--topic")
     ark.set_defaults(func=cmd_ark)
 
     chat = sub.add_parser("chat", help="чат в терминале")
@@ -496,6 +551,13 @@ def build_parser() -> argparse.ArgumentParser:
     focus = sub.add_parser("focus", help="специализация узла (чему он учит сеть)")
     focus.add_argument("value", nargs="*")
     focus.set_defaults(func=cmd_focus)
+
+    asknet = sub.add_parser("asknet", help="спросить всю сеть (выберет специалиста)")
+    asknet.add_argument("text", nargs="+")
+    asknet.add_argument("--timeout", type=float, default=12.0)
+    asknet.set_defaults(func=cmd_asknet)
+
+    sub.add_parser("map", help="карта сети: узлы, специализации, знания").set_defaults(func=cmd_map)
 
     pack = sub.add_parser("pack", help="собрать носитель (sneakernet)")
     pack.add_argument("out")

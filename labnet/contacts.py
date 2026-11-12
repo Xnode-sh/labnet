@@ -41,19 +41,19 @@ class ContactStore:
             if os.path.exists(tmp):
                 os.unlink(tmp)
 
-    def check(self, node_id: str, name: str, pub: str, level: str = "") -> tuple[str, dict]:
+    def check(self, node_id: str, name: str, pub: str, level: str = "", focus: str = "") -> tuple[str, dict]:
         """Return ('new' | 'known' | 'changed', record) and update last-seen."""
         data = self._load()
         now = int(time.time())
         record = data.get(node_id)
         if record is None:
-            record = {"name": name, "pub": pub, "level": level,
+            record = {"name": name, "pub": pub, "level": level, "focus": focus,
                       "first_seen": now, "last_seen": now, "seen": 1}
             data[node_id] = record
             self._save(data)
             return "new", record
         status = "changed" if record.get("pub") != pub else "known"
-        record.update({"name": name, "level": level, "last_seen": now,
+        record.update({"name": name, "level": level, "focus": focus, "last_seen": now,
                        "seen": record.get("seen", 1) + 1})
         if status == "changed":
             record["prev_pub"] = record.get("pub")

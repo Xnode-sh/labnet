@@ -37,7 +37,8 @@ class Mesh:
     def meet(self, card: dict) -> tuple[str, dict]:
         """Register a peer from its card (TOFU pinning). Returns (status, record)."""
         return self.contacts.check(card.get("node_id", ""), card.get("nick", ""),
-                                   card.get("pub", ""), card.get("level", ""))
+                                   card.get("pub", ""), card.get("level", ""),
+                                   card.get("focus", ""))
 
     # --- roster ---------------------------------------------------------
     def card(self, holdings: dict | None = None, role: str = "node", caps: list[str] | None = None) -> dict:

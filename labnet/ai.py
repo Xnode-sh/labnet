@@ -65,7 +65,8 @@ def retrieve(ark, question: str, limit: int = 3) -> list[dict]:
         overlap = len(terms & _keywords(text))
         if overlap:
             snippet = text[:600]
-            scored.append((overlap, {"name": manifest["name"], "snippet": snippet}))
+            scored.append((overlap, {"name": manifest["name"], "by": manifest.get("by", ""),
+                                     "snippet": snippet}))
     scored.sort(key=lambda item: item[0], reverse=True)
     return [item[1] for item in scored[:limit]]
 
@@ -102,3 +103,35 @@ def ask(mesh, peer: str, question: str, timeout: float = 10.0, interval: float =
                 return message
         time.sleep(interval)
     return None
+
+
+def _focus_score(question: str, focus: str) -> int:
+    return len(_keywords(question) & _keywords(focus))
+
+
+def asknet(mesh, question: str, timeout: float = 12.0, interval: float = 0.5) -> dict:
+    """Ask the whole network; rank answers by how well the responder's focus matches."""
+    peers = [p for p in mesh.peers() if not p["self"]]
+    mesh.send("all", question, kind="ask")
+    focus_by_id = {c["node_id"]: c.get("focus", "") for c in mesh.contacts.all()}
+    answers: dict[str, dict] = {}
+    start = time.time()
+    while time.time() - start < timeout:
+        for message in mesh.recv():
+            if message.get("type") == "reply" and message.get("from_id") not in answers:
+                answers[message["from_id"]] = message
+        if peers and len(answers) >= len(peers):
+            break
+        time.sleep(interval)
+    ranked = []
+    for node_id, message in answers.items():
+        card_focus = focus_by_id.get(node_id, "")
+        ranked.append({
+            "from": message.get("from"),
+            "from_id": node_id,
+            "focus": card_focus,
+            "score": _focus_score(question, card_focus),
+            "text": message.get("text", ""),
+        })
+    ranked.sort(key=lambda a: a["score"], reverse=True)
+    return {"question": question, "asked": len(peers), "answers": ranked}
