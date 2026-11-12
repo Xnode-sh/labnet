@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.env
+.env.*
+
+# локальные узлы, каналы и ключи — никогда в git
+.n1/
+.n2/
+.share/
+*.share/
