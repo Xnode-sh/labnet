@@ -46,9 +46,11 @@ fi
 say "сборка bootstrap в Docker (долго — десятки минут)"
 export TERMUX_APP_PACKAGE="$APP_PACKAGE"
 export TERMUX__PREFIX="$PREFIX"
+# Набор предустановки. Без git/rsync: их зависимости (apr-util) сейчас не собираются
+# из-за 404 на исходнике, а labnet уже вложен в bootstrap — git на устройстве не нужен.
 ( cd "$PKG" && ./scripts/run-docker.sh ./scripts/build-bootstraps.sh \
     --architectures "$ARCH" \
-    --add "python,python-cryptography,git,termux-api,nano,rsync" )
+    --add "python,python-cryptography,termux-api,nano" )
 
 BOOT="$(ls "$PKG"/bootstrap-"$ARCH".zip "$PKG"/build-tools/bootstrap-"$ARCH".zip 2>/dev/null | head -1)"
 [ -n "$BOOT" ] && [ -f "$BOOT" ] || { echo "bootstrap не найден после сборки"; exit 1; }

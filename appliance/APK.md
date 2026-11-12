@@ -16,7 +16,7 @@ bash appliance/build-bootstrap.sh
 ```
 
 Скрипт: клонирует `termux/termux-packages`, собирает в Docker bootstrap под префикс
-`sh.xnode.redterm`, ставит `python python-cryptography git termux-api nano rsync`,
+`sh.xnode.redterm`, ставит `python python-cryptography termux-api nano`,
 затем **вкладывает** labnet, набор выживания, промпт ИИ и установщик (`usr/share/labnet`),
 добавляет `usr/bin/labnet-setup`. На выходе — `bootstrap-aarch64.zip` с нашим префиксом.
 

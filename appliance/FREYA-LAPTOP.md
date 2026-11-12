@@ -31,7 +31,7 @@ Termux с предустановленными ПО, ИИ и сетью labnet �
    bash appliance/build-bootstrap.sh
    ```
    Скрипт клонирует `termux/termux-packages`, собирает bootstrap под
-   `sh.xnode.redterm`, ставит `python python-cryptography git termux-api`,
+   `sh.xnode.redterm`, ставит `python python-cryptography termux-api`,
    вкладывает labnet + seed + persona + installer.
 
 4. Собери APK по инструкции `appliance/APK.md`:

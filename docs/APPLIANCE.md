@@ -14,7 +14,7 @@ bash ~/labnet/install/install.sh
 публикует объявление, готовит ИИ-промпт и запускает фоновый демон.
 
 Состав предустановки (Termux-пакеты):
-`python python-cryptography git termux-api` (+ опц. `ollama`).
+`python python-cryptography termux-api` (+ опц. `ollama`).
 
 ## Уровень 2 — оффлайн-бандл (флешка)
 
@@ -47,7 +47,7 @@ bash appliance/APK.md               # дальнейшие шаги (форк te
    export TERMUX__PREFIX=/data/data/sh.xnode.redterm/files/usr
    ./scripts/run-docker.sh ./scripts/build-bootstraps.sh \
        --architectures aarch64 \
-       --add "python,python-cryptography,git,termux-api,ollama"
+       --add "python,python-cryptography,termux-api,nano"
    ```
 2. Вложить `labnet` (весь код), `install/persona-doomsday.md` и, по желанию, модель/бандл
    в bootstrap как `$PREFIX/share/labnet`.
