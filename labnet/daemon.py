@@ -6,7 +6,7 @@ from __future__ import annotations
 import socket
 import time
 
-from . import discovery, feedback, session
+from . import ai, discovery, feedback, session
 from .chat import Chat
 
 DEFAULT_INTERVAL = 20.0
@@ -47,7 +47,14 @@ class Daemon:
 
     def _ingest(self, messages: list[dict]) -> int:
         for message in messages:
-            if message.get("type") in ("text", "error"):
+            if message.get("type") == "ask":
+                reply = ai.handle_ask(self.mesh.ark, message)
+                self.mesh.send(message.get("from"), reply, kind="reply")
+                self.chat.store.append(message.get("from_id") or message.get("from", "?"),
+                                       "in", message.get("text", ""), message.get("ts"))
+                self._log(f"   [ai] на вопрос от {message.get('from')}: {reply[:80]}")
+                continue
+            if message.get("type") in ("text", "error", "reply"):
                 self.chat.store.append(message.get("from_id") or message.get("from", "?"),
                                        "in", message.get("text", ""), message.get("ts"))
             self._log(f"   [{message.get('type')}] {message.get('from')}: {message.get('text')}")

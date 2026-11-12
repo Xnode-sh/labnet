@@ -338,6 +338,42 @@ def cmd_nfc(args) -> int:
     return result.returncode
 
 
+def cmd_ask(args) -> int:
+    from . import ai
+    mesh = _mesh(args)
+    question = " ".join(args.text)
+    if ai.provider_available():
+        print(f"(локальная модель: {ai.DEFAULT_MODEL})", file=sys.stderr)
+    reply = ai.ask(mesh, args.peer, question, timeout=args.timeout)
+    if reply is None:
+        print("ответа нет (узел оффлайн или не отвечает)")
+        return 1
+    print(f"{reply.get('from')}: {reply.get('text')}")
+    return 0
+
+
+def cmd_serve_ai(args) -> int:
+    from . import ai
+    from .chat import Chat
+    mesh = _mesh(args)
+    chat = Chat(mesh, mesh.net_key)
+    print(f"AI-узел готов (модель: {'ollama' if ai.provider_available() else 'только Ковчег'})")
+    try:
+        while True:
+            for message in mesh.recv():
+                if message.get("type") == "ask":
+                    reply = ai.handle_ask(mesh.ark, message)
+                    mesh.send(message.get("from"), reply, kind="reply")
+                    print(f"→ {message.get('from')}: {reply[:100]}")
+                elif message.get("type") in ("text", "reply"):
+                    chat.store.append(message.get("from_id") or message.get("from", "?"),
+                                      "in", message.get("text", ""), message.get("ts"))
+                    print(f"[{message.get('from')}] {message.get('text')}")
+            time.sleep(2)
+    except KeyboardInterrupt:
+        return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="labnet", description="Приватная сеть поверх своего канала (без root)")
     parser.add_argument("--share", help="каталог-канал (по умолчанию из конфига)")
@@ -434,6 +470,14 @@ def build_parser() -> argparse.ArgumentParser:
     nfc = sub.add_parser("nfc", help="NFC-токен (аргументы идут в termux-nfc)")
     nfc.add_argument("args", nargs=argparse.REMAINDER)
     nfc.set_defaults(func=cmd_nfc)
+
+    ask = sub.add_parser("ask", help="спросить узел (ИИ/Ковчег)")
+    ask.add_argument("peer")
+    ask.add_argument("text", nargs="+")
+    ask.add_argument("--timeout", type=float, default=10.0)
+    ask.set_defaults(func=cmd_ask)
+
+    sub.add_parser("serve-ai", help="отвечать на вопросы (ИИ/Ковчег)").set_defaults(func=cmd_serve_ai)
 
     sub.add_parser("whoami", help="кто я").set_defaults(func=cmd_whoami)
     return parser

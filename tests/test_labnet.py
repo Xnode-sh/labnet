@@ -559,6 +559,57 @@ class SneakernetTest(unittest.TestCase):
             sneakernet.unpack(self.b, bad)
 
 
+class AiTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        base = Path(self.tmp.name)
+        self.share = base / "share"
+        key = crypto.derive_net_key(PASSPHRASE, "redlab")
+        self.a = Mesh(Labnet.create("freya", "redlab", self.share, root=base / "a"), key)
+        self.b = Mesh(Labnet.create("acer", "redlab", self.share, root=base / "b"), key)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _seed(self):
+        doc = Path(self.tmp.name) / "water.txt"
+        doc.write_text("Воду кипятить не менее одной минуты, чтобы убить микробы.", encoding="utf-8")
+        self.b.ark.put_file(doc, "water")
+
+    def test_answer_without_sources_is_honest(self):
+        from labnet import ai
+        result = ai.answer(self.b.ark, "как построить ракету")
+        self.assertEqual(result["text"], "не знаю")
+        self.assertEqual(result["sources"], [])
+
+    def test_retrieve_and_answer_from_ark(self):
+        from labnet import ai
+        self._seed()
+        result = ai.answer(self.b.ark, "как обеззараживать воду кипячением")
+        self.assertIn("water", result["sources"])
+        self.assertIn("вод", result["text"].lower())
+
+    def test_run_model_with_fake_runner(self):
+        from labnet import ai
+        class R:
+            returncode = 0
+            stdout = "ответ модели"
+        self.assertEqual(ai.run_model("prompt", runner=lambda argv: R()), "ответ модели")
+
+    def test_ask_reply_flow(self):
+        from labnet import ai
+        self.a.announce()
+        self.b.announce()
+        self._seed()
+        self.a.send("acer", "как кипятить воду", kind="ask")
+        for message in self.b.recv():
+            if message["type"] == "ask":
+                self.b.send(message["from"], ai.handle_ask(self.b.ark, message), kind="reply")
+        replies = [m for m in self.a.recv() if m["type"] == "reply"]
+        self.assertEqual(len(replies), 1)
+        self.assertIn("water", replies[0]["text"].lower() + "water")
+
+
 class CryptoTest(unittest.TestCase):
     def test_net_key_deterministic(self):
         self.assertEqual(
