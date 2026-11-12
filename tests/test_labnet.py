@@ -522,6 +522,43 @@ class DaemonTest(unittest.TestCase):
         self.assertEqual(history[0]["dir"], "in")
 
 
+class SneakernetTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        base = Path(self.tmp.name)
+        key = crypto.derive_net_key(PASSPHRASE, "redlab")
+        self.a = Mesh(Labnet.create("freya", "redlab", base / "sA", root=base / "a"), key)
+        self.b = Mesh(Labnet.create("acer", "redlab", base / "sB", root=base / "b"), key)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_pack_unpack_carries_message_and_ark(self):
+        from labnet import sneakernet
+        source = Path(self.tmp.name) / "manual.txt"
+        source.write_bytes(b"first aid\n" * 200)
+        self.a.ark.put_file(source, "first-aid")
+        envelope = self.a._seal(self.b.node.node_id, self.a._payload("text", "через флешку"))
+        self.a.outbox.add(envelope)
+        self.a.transport.deliver(self.b.node.node_id, envelope)
+
+        carrier = sneakernet.pack(self.a, Path(self.tmp.name) / "carrier.tar.gz")
+        count = sneakernet.unpack(self.b, carrier)
+        self.assertEqual(count, 1)
+        self.assertTrue(self.b.ark.has_manifest("first-aid"))
+
+    def test_unpack_rejects_traversal(self):
+        import tarfile
+        from labnet import sneakernet
+        bad = Path(self.tmp.name) / "bad.tar.gz"
+        with tarfile.open(bad, "w:gz") as tar:
+            info = tarfile.TarInfo("../evil")
+            info.size = 0
+            tar.addfile(info)
+        with self.assertRaises(LabnetError):
+            sneakernet.unpack(self.b, bad)
+
+
 class CryptoTest(unittest.TestCase):
     def test_net_key_deterministic(self):
         self.assertEqual(

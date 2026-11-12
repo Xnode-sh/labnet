@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import getpass
 import json
+import shutil
 import os
 import sys
 from pathlib import Path
@@ -311,6 +312,32 @@ def cmd_daemon(args) -> int:
     return 0
 
 
+def cmd_pack(args) -> int:
+    from . import sneakernet
+    mesh = _mesh(args)
+    dest = sneakernet.pack(mesh, Path(args.out))
+    print(f"носитель собран: {dest}")
+    return 0
+
+
+def cmd_unpack(args) -> int:
+    from . import sneakernet
+    mesh = _mesh(args)
+    count = sneakernet.unpack(mesh, Path(args.path))
+    print(f"носитель распакован; принято сообщений: {count}")
+    return 0
+
+
+def cmd_nfc(args) -> int:
+    import subprocess
+    if shutil.which("termux-nfc") is None:
+        raise LabnetError("нет termux-nfc (нужно приложение Termux:API)")
+    result = subprocess.run(["termux-nfc", *args.args], capture_output=True, text=True)
+    sys.stdout.write(result.stdout)
+    sys.stderr.write(result.stderr)
+    return result.returncode
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="labnet", description="Приватная сеть поверх своего канала (без root)")
     parser.add_argument("--share", help="каталог-канал (по умолчанию из конфига)")
@@ -395,6 +422,18 @@ def build_parser() -> argparse.ArgumentParser:
     daemon.add_argument("--role", default="node")
     daemon.add_argument("--quiet", action="store_true")
     daemon.set_defaults(func=cmd_daemon)
+
+    pack = sub.add_parser("pack", help="собрать носитель (sneakernet)")
+    pack.add_argument("out")
+    pack.set_defaults(func=cmd_pack)
+
+    unpack = sub.add_parser("unpack", help="распаковать носитель")
+    unpack.add_argument("path")
+    unpack.set_defaults(func=cmd_unpack)
+
+    nfc = sub.add_parser("nfc", help="NFC-токен (аргументы идут в termux-nfc)")
+    nfc.add_argument("args", nargs=argparse.REMAINDER)
+    nfc.set_defaults(func=cmd_nfc)
 
     sub.add_parser("whoami", help="кто я").set_defaults(func=cmd_whoami)
     return parser
