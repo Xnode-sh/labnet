@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Xnode-sh — RED └•TEAM•┐ lab™
+name: appliance
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "appliance/**"
+      - ".github/workflows/appliance.yml"
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build bootstrap with labnet payload
+        env:
+          WORK: ${{ github.workspace }}/.appliance
+        run: bash appliance/build-bootstrap.sh
+
+      - name: Show artifacts
+        run: find . -name 'bootstrap-*.zip' -print
+
+      - name: Upload bootstrap
+        uses: actions/upload-artifact@v4
+        with:
+          name: labnet-bootstrap
+          path: "**/bootstrap-*.zip"
+          if-no-files-found: error
+          retention-days: 30
