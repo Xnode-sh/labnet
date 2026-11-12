@@ -3,6 +3,17 @@
 Цель: один артефакт, который ставится на любой Android и приносит готовое окружение —
 **Termux + предустановленное ПО + labnet + Ковчег + ИИ**. Работает оффлайн.
 
+## Уровень 0 — bootstrap с нашим payload (быстро, надёжно, без Docker)
+
+```bash
+bash appliance/make-bootstrap.sh     # качает официальный bootstrap Termux и вкладывает labnet
+```
+
+На выходе `bootstrap-aarch64.zip` с сетью судного дня, набором выживания, промптом и
+установщиком внутри. Это базовый bootstrap Termux (без python) — при первом запуске
+`labnet-setup` доустановит `python`/`python-cryptography` (нужен интернет один раз).
+Тот же артефакт собирается в GitHub Actions (workflow `appliance`).
+
 ## Уровень 1 — установщик в существующий Termux (готово)
 
 ```bash

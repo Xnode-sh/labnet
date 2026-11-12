@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Xnode-sh — RED └•TEAM•┐ lab™
 # Вкладывает labnet (код, набор выживания, промпт ИИ, установщик) в bootstrap-zip.
-# Использует python3 (zipfile) — работает и без пакета zip, сохраняет права на файлы.
+# Layout bootstrap = содержимое префикса (bin/, share/, ...).
+# Использует python3 (zipfile) — сохраняет права, правит shebang под префикс.
 set -euo pipefail
 
 BOOT="$1"; PREFIX="$2"; SRCDIR="$3"
@@ -38,32 +39,32 @@ def add_tree(zf, path, arc):
 
 src = zipfile.ZipFile(boot)
 out = zipfile.ZipFile(boot + ".new", "w", zipfile.ZIP_DEFLATED)
+existing = set(src.namelist())
 for zi in src.infolist():
     out.writestr(zi, src.read(zi.filename))
 src.close()
 
-base = "usr/share/labnet"
+base = "share/labnet"
 for item in items:
     path = os.path.join(srcdir, item)
     if os.path.exists(path):
         add_tree(out, path, f"{base}/{item}")
 
-# entrypoint под реальный префикс
 entry = os.path.join(srcdir, "labnet.py")
 data = open(entry, "rb").read().split(b"\n", 1)
 add_file(out, f"{base}/labnet.py", f"#!{prefix}/bin/python3\n".encode() + data[1], 0o755)
 
-add_file(out, "usr/bin/labnet-setup",
+add_file(out, "bin/labnet-setup",
          f'#!{prefix}/bin/bash\nexec bash "{prefix}/share/labnet/install/install.sh" "$@"\n'.encode(),
          0o755)
 out.close()
 os.replace(boot + ".new", boot)
 
-check = zipfile.ZipFile(boot)
-joined = b"".join(check.read(n) for n in check.namelist() if not n.startswith(base))
-if b"com.termux" in joined:
-    print("  ⚠ в bootstrap всё ещё есть префикс com.termux — проверь сборку")
-else:
-    print("  payload вложен, чужого префикса нет")
-print(f"  добавлено: {base} (сеть, Ковчег, seed, install) + usr/bin/labnet-setup")
+# Если префикс не com.termux, проверим, что чужой префикс не просочился в наш payload.
+if "com.termux" not in prefix:
+    check = zipfile.ZipFile(boot)
+    joined = b"".join(check.read(n) for n in check.namelist() if n.startswith(base))
+    if b"com.termux" in joined:
+        print("  ⚠ в payload остался префикс com.termux")
+print(f"  payload вложен: {base} + bin/labnet-setup (prefix {prefix})")
 PY

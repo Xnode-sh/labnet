@@ -8,19 +8,22 @@ on:
     branches: [main]
     paths:
       - "appliance/**"
+      - "labnet/**"
+      - "install/**"
+      - "seed/**"
+      - "docs/**"
       - ".github/workflows/appliance.yml"
 
 jobs:
   bootstrap:
     runs-on: ubuntu-latest
-    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build bootstrap with labnet payload
+      - name: Build doomsday bootstrap (official Termux + labnet payload)
         env:
           WORK: ${{ github.workspace }}/.appliance
-        run: bash appliance/build-bootstrap.sh
+        run: bash appliance/make-bootstrap.sh
 
       - name: Show artifacts
         run: find . -name 'bootstrap-*.zip' -print
