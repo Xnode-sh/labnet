@@ -1,6 +1,10 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Xnode-sh — RED └•TEAM•┐ lab™
-"""labnet mesh: sealed, signed envelopes between named nodes over a shared channel."""
+"""labnet mesh: sealed, signed envelopes between named nodes over a shared channel.
+
+Store-and-forward: outgoing envelopes live in a durable outbox until the recipient
+acks them; envelopes addressed to other nodes are relayed (multi-hop, TTL-bounded).
+"""
 from __future__ import annotations
 
 import json
@@ -9,11 +13,12 @@ import time
 
 from . import crypto
 from .crypto import LabnetError
+from .queue import Outbox, Seen
+from .relay import DEFAULT_TTL, RelayStore, hop
 from .store import Labnet
 from .transport import DirTransport
 
 PROTOCOL = 1
-MAX_CLOCK_SKEW = 0  # информативно; время проверяется, но не блокирует приём
 
 
 class Mesh:
@@ -21,6 +26,9 @@ class Mesh:
         self.node = node
         self.net_key = net_key
         self.transport = DirTransport(node.channel)
+        self.outbox = Outbox(node.state / "outbox")
+        self.relay = RelayStore(node.state / "relay")
+        self.seen = Seen(node.state / "seen.txt")
 
     # --- roster ---------------------------------------------------------
     def announce(self) -> dict:
@@ -63,35 +71,53 @@ class Mesh:
         return matched
 
     # --- envelopes ------------------------------------------------------
-    def _seal(self, to: dict, payload: dict) -> dict:
+    def _seal(self, to_id: str, payload: dict, ttl: int = DEFAULT_TTL) -> dict:
         aad = self.node.net.encode("utf-8")
         blob = crypto.encrypt(self.net_key, json.dumps(payload, ensure_ascii=False).encode("utf-8"), aad)
         envelope = {
             "v": PROTOCOL,
+            "id": crypto.random_id(),
             "net": self.node.net,
             "from": self.node.name,
             "from_id": self.node.node_id,
             "from_pub": self.node.identity.to_dict()["pub"],
-            "to_id": to["node_id"],
+            "to_id": to_id,
+            "via": [],
+            "ttl": ttl,
             "ts": int(time.time()),
             "ct": crypto.b64e(blob),
         }
-        envelope["sig"] = self.node.identity.sign(crypto.canonical(envelope))
+        envelope["sig"] = self.node.identity.sign(crypto.canonical(crypto.signed_view(envelope)))
         return envelope
 
-    def send(self, target: str, text: str, kind: str = "text") -> list[str]:
+    def _payload(self, kind: str, text: str = "", **extra) -> dict:
         payload = {"type": kind, "text": text, "ts": int(time.time())}
+        payload.update(extra)
+        return payload
+
+    def send(self, target: str, text: str, kind: str = "text", via: str | None = None) -> list[str]:
+        """Queue + deliver to every resolved recipient. `via` routes through a relay node."""
+        relay_ids = None
+        if via:
+            relay_ids = [r["node_id"] for r in self.resolve(via)]
         delivered = []
         for peer in self.resolve(target):
-            self.transport.deliver(peer["node_id"], self._seal(peer, payload))
+            envelope = self._seal(peer["node_id"], self._payload(kind, text))
+            self.outbox.add(envelope)
+            if relay_ids:
+                for relay_id in relay_ids:
+                    self.transport.deliver(relay_id, envelope)
+            else:
+                self.transport.deliver(peer["node_id"], envelope)
             delivered.append(peer["name"])
         return delivered
 
     def _open(self, envelope: dict) -> dict:
         if envelope.get("net") != self.node.net:
             raise LabnetError("конверт из другой сети")
-        unsigned = {k: envelope[k] for k in envelope if k != "sig"}
-        if not crypto.NodeIdentity.verify(envelope.get("from_pub", ""), crypto.canonical(unsigned), envelope.get("sig", "")):
+        if not crypto.NodeIdentity.verify(envelope.get("from_pub", ""),
+                                           crypto.canonical(crypto.signed_view(envelope)),
+                                           envelope.get("sig", "")):
             raise LabnetError("подпись не сходится — конверт подделан")
         plain = crypto.decrypt(self.net_key, crypto.b64d(envelope["ct"]), self.node.net.encode("utf-8"))
         payload = json.loads(plain.decode("utf-8"))
@@ -99,20 +125,70 @@ class Mesh:
             "from": envelope.get("from", "?"),
             "from_id": envelope.get("from_id", ""),
             "ts": envelope.get("ts", 0),
+            "id": envelope.get("id", ""),
             "type": payload.get("type", "text"),
             "text": payload.get("text", ""),
+            "ack_id": payload.get("ack_id", ""),
         }
 
+    def _ack(self, to_id: str, ack_id: str) -> None:
+        if not ack_id:
+            return
+        self.transport.deliver(to_id, self._seal(to_id, self._payload("ack", "", ack_id=ack_id), ttl=1))
+
     def recv(self) -> list[dict]:
-        messages = []
+        """Process everything queued: ack own outbox, relay foreign envelopes, return new messages."""
+        acked = 0
+        messages: list[dict] = []
         for path, envelope in self.transport.collect(self.node.node_id):
-            try:
-                messages.append(self._open(envelope))
-            except LabnetError as exc:
-                messages.append({"from": envelope.get("from", "?"), "type": "error", "text": str(exc), "ts": envelope.get("ts", 0)})
             self.transport.ack(path)
+            env_id = envelope.get("id", "")
+            if not self.seen.is_new(env_id):
+                continue
+            if envelope.get("to_id") != self.node.node_id:
+                if int(envelope.get("ttl", 0)) > 0:
+                    self.relay.accept(hop(envelope, self.node.node_id))
+                continue
+            try:
+                message = self._open(envelope)
+            except LabnetError as exc:
+                messages.append({"from": envelope.get("from", "?"), "type": "error",
+                                 "text": str(exc), "ts": envelope.get("ts", 0)})
+                continue
+            if message["type"] == "ack":
+                if self.outbox.mark_done(message["ack_id"]):
+                    acked += 1
+                continue
+            try:
+                self._ack(message["from_id"], message["id"])
+            except OSError:
+                pass
+            messages.append(message)
+        self.forward()
+        self.redeliver()
+        self._last_acked = acked
         return messages
 
+    def forward(self) -> int:
+        """Deliver relayed envelopes to peers that are now known."""
+        known = {p["node_id"] for p in self.peers()}
+        count = 0
+        for envelope in self.relay.all():
+            if envelope.get("to_id") in known:
+                self.transport.deliver(envelope["to_id"], envelope)
+                self.relay.drop(envelope["id"])
+                count += 1
+        return count
+
+    def redeliver(self) -> int:
+        """Re-send pending outbox envelopes (idempotent thanks to dedup)."""
+        count = 0
+        for envelope in self.outbox.pending():
+            self.transport.deliver(envelope["to_id"], envelope)
+            count += 1
+        return count
+
+    # --- liveness -------------------------------------------------------
     def ping(self, peer: str, timeout: float = 5.0, interval: float = 0.5) -> float | None:
         token = f"ping-{int(time.time() * 1000)}"
         self.send(peer, token, kind="ping")
@@ -125,7 +201,6 @@ class Mesh:
         return None
 
     def serve_pings(self) -> int:
-        """Answer any queued pings; return how many were answered."""
         answered = 0
         for message in self.recv():
             if message["type"] == "ping":

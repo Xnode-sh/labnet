@@ -106,6 +106,72 @@ class MeshTest(unittest.TestCase):
         self.assertEqual(pongs[0]["text"], token)
 
 
+class StoreForwardTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        base = Path(self.tmp.name)
+        self.share = base / "share"
+        key = crypto.derive_net_key(PASSPHRASE, "redlab")
+        self.a = Mesh(Labnet.create("freya", "redlab", self.share, root=base / "a"), key)
+        self.b = Mesh(Labnet.create("acer", "redlab", self.share, root=base / "b"), key)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_outbox_pending_until_ack(self):
+        self.a.announce()
+        self.b.announce()
+        self.a.send("acer", "на связи?")
+        self.assertEqual(self.a.outbox.size(), 1)
+        self.b.recv()
+        self.a.recv()
+        self.assertEqual(self.a.outbox.size(), 0)
+
+    def test_dedup_same_envelope(self):
+        self.a.announce()
+        self.b.announce()
+        self.a.send("acer", "один")
+        env = self.a.outbox.pending()[0]
+        self.a.transport.deliver(self.b.node.node_id, env)
+        messages = self.b.recv()
+        self.assertEqual(len(messages), 1)
+
+    def test_relay_multi_hop(self):
+        self.a.announce()
+        self.b.announce()
+        c = Mesh(Labnet.create("lira", "redlab", self.share, root=Path(self.tmp.name) / "c"),
+                 crypto.derive_net_key(PASSPHRASE, "redlab"))
+        envelope = self.a._seal(c.node.node_id, self.a._payload("text", "для LIRA через ACER"))
+        self.a.transport.deliver(self.b.node.node_id, envelope)
+        self.b.recv()
+        self.assertEqual(self.b.relay.size(), 1)
+        c.announce()
+        self.assertEqual(self.b.forward(), 1)
+        messages = c.recv()
+        self.assertEqual(messages[0]["text"], "для LIRA через ACER")
+        self.assertEqual(messages[0]["from"], "freya")
+
+    def test_relay_respects_ttl(self):
+        self.a.announce()
+        self.b.announce()
+        c = Mesh(Labnet.create("lira", "redlab", self.share, root=Path(self.tmp.name) / "d"),
+                 crypto.derive_net_key(PASSPHRASE, "redlab"))
+        envelope = self.a._seal(c.node.node_id, self.a._payload("text", "умрёт в пути"), ttl=1)
+        self.a.transport.deliver(self.b.node.node_id, envelope)
+        self.b.recv()
+        self.assertEqual(self.b.relay.size(), 0)
+
+    def test_send_via_delivers_to_relay(self):
+        self.a.announce()
+        self.b.announce()
+        c = Mesh(Labnet.create("lira", "redlab", self.share, root=Path(self.tmp.name) / "e"),
+                 crypto.derive_net_key(PASSPHRASE, "redlab"))
+        c.announce()
+        self.a.send("lira", "через посредника", via="acer")
+        self.b.recv()
+        self.assertEqual(c.recv()[0]["text"], "через посредника")
+
+
 class CryptoTest(unittest.TestCase):
     def test_net_key_deterministic(self):
         self.assertEqual(

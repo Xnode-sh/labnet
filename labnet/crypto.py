@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import hmac
 import json
 import os
 
@@ -57,6 +58,22 @@ def decrypt(net_key: bytes, blob: bytes, aad: bytes = b"") -> bytes:
 
 def canonical(obj: dict) -> bytes:
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+
+
+def random_id() -> str:
+    return os.urandom(16).hex()
+
+
+ROUTING_FIELDS = ("via", "ttl")
+
+
+def signed_view(envelope: dict) -> dict:
+    """Fields covered by the signature: everything except sig and mutable routing."""
+    return {k: v for k, v in envelope.items() if k != "sig" and k not in ROUTING_FIELDS}
+
+
+def hmac256(key: bytes, message: bytes) -> bytes:
+    return hmac.new(key, message, hashlib.sha256).digest()
 
 
 class NodeIdentity:

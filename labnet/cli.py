@@ -71,6 +71,26 @@ def cmd_send(args) -> int:
     return 0
 
 
+def cmd_queue(args) -> int:
+    mesh = _mesh(args)
+    pending = mesh.outbox.pending()
+    relay = mesh.relay.all()
+    if args.json:
+        print(json.dumps({"pending": pending, "relay": relay}, ensure_ascii=False, indent=2))
+        return 0
+    print(f"в очереди (ждут ack): {len(pending)}")
+    print(f"на пересылку (relay): {len(relay)}")
+    return 0
+
+
+def cmd_flush(args) -> int:
+    mesh = _mesh(args)
+    sent = mesh.redeliver()
+    relayed = mesh.forward()
+    print(f"повторно отправлено: {sent}, переслано: {relayed}")
+    return 0
+
+
 def cmd_recv(args) -> int:
     messages = _mesh(args).recv()
     if args.json:
@@ -139,6 +159,12 @@ def build_parser() -> argparse.ArgumentParser:
     ping.set_defaults(func=cmd_ping)
 
     sub.add_parser("serve", help="ответить на входящие ping").set_defaults(func=cmd_serve)
+
+    queue = sub.add_parser("queue", help="показать очередь и relay")
+    queue.add_argument("--json", action="store_true")
+    queue.set_defaults(func=cmd_queue)
+
+    sub.add_parser("flush", help="повторить отправку и пересылку").set_defaults(func=cmd_flush)
 
     sub.add_parser("whoami", help="кто я").set_defaults(func=cmd_whoami)
     return parser

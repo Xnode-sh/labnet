@@ -59,6 +59,12 @@ class Labnet:
     def channel(self) -> Path:
         return self.share / self.net
 
+    @property
+    def state(self) -> Path:
+        path = self.root / "state"
+        path.mkdir(mode=DIR_MODE, parents=True, exist_ok=True)
+        return path
+
     @classmethod
     def create(cls, name: str, net: str, share: Path, root: Path | None = None) -> "Labnet":
         root = root or config_root()
