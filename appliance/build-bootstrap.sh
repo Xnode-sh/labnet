@@ -19,8 +19,12 @@ have() { command -v "$1" >/dev/null 2>&1; }
 say "проверка окружения"
 have docker || { echo "НУЖЕН Docker. Установи docker и повтори."; exit 1; }
 have git || { echo "нужен git"; exit 1; }
-docker info >/dev/null 2>&1 || { echo "Docker не запущен (systemctl start docker)"; exit 1; }
-echo "  docker: ok   arch: $ARCH   package: $APP_PACKAGE"
+docker info >/dev/null 2>&1 || { echo "Docker не запущен (systemctl start docker / открой Docker Desktop)"; exit 1; }
+# На Apple Silicon Docker Desktop по умолчанию arm64 — termux-packages ждёт linux/amd64.
+case "$(uname -s)-$(uname -m)" in
+  Darwin-arm64) export DOCKER_DEFAULT_PLATFORM="${DOCKER_DEFAULT_PLATFORM:-linux/amd64}" ;;
+esac
+echo "  docker: ok   arch: $ARCH   package: $APP_PACKAGE   platform: ${DOCKER_DEFAULT_PLATFORM:-native}"
 
 mkdir -p "$WORK"
 PKG="$WORK/termux-packages"
