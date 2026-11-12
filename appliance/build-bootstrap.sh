@@ -36,6 +36,13 @@ else
   git -C "$PKG" pull --ff-only || true
 fi
 
+# Обход бага upstream: build-bootstraps.sh указывает 'bzip2', но теперь это
+# подпакет 'libbz2' (issue termux/termux-packages#27093). Патчим идемпотентно.
+if grep -q 'PACKAGES+=("bzip2")' "$PKG/scripts/build-bootstraps.sh" 2>/dev/null; then
+  say "патч upstream: bzip2 -> libbz2 в build-bootstraps.sh"
+  sed -i 's/PACKAGES+=("bzip2")/PACKAGES+=("libbz2")/' "$PKG/scripts/build-bootstraps.sh"
+fi
+
 say "сборка bootstrap в Docker (долго — десятки минут)"
 export TERMUX_APP_PACKAGE="$APP_PACKAGE"
 export TERMUX__PREFIX="$PREFIX"
