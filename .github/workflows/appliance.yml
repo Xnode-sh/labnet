@@ -22,7 +22,7 @@ jobs:
 
       - name: Build doomsday bootstrap (official Termux + labnet payload)
         env:
-          WORK: ${{ github.workspace }}/.appliance
+          WORK: ${{ github.workspace }}/build-out
         run: bash appliance/make-bootstrap.sh
 
       - name: Show artifacts
