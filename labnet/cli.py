@@ -224,6 +224,62 @@ def cmd_ark(args) -> int:
     return 0
 
 
+def cmd_chat(args) -> int:
+    from .chat import Chat
+    mesh = _mesh(args)
+    chat = Chat(mesh, mesh.net_key)
+    peer = args.peer
+    print("labnet чат · /peer <имя> — выбрать собеседника · /quit — выход")
+    while True:
+        try:
+            line = input("> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return 0
+        if not line:
+            continue
+        if line in ("/quit", "/exit"):
+            return 0
+        if line.startswith("/peer "):
+            peer = line[6:].strip()
+            print("собеседник:", peer)
+            continue
+        for message in chat.poll():
+            print(f"[{message.get('from')}] {message.get('text')}")
+        if not peer:
+            print("выбери собеседника: /peer <имя>")
+            continue
+        try:
+            delivered = chat.send(peer, line)
+            print("отправлено:", ", ".join(delivered))
+        except LabnetError as exc:
+            print("ошибка:", exc)
+
+
+def cmd_web(args) -> int:
+    import shutil
+    import subprocess
+    import threading
+    from . import web
+    from .chat import Chat
+    mesh = _mesh(args)
+    chat = Chat(mesh, mesh.net_key)
+    server = web.serve(chat, mesh, port=args.port)
+    url = f"http://127.0.0.1:{args.port}/"
+    print("чат открыт:", url)
+    if not args.no_open and shutil.which("termux-open-url"):
+        subprocess.run(["termux-open-url", url], capture_output=True)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        while True:
+            chat.poll()
+            time.sleep(2)
+    except KeyboardInterrupt:
+        return 0
+    finally:
+        server.shutdown()
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="labnet", description="Приватная сеть поверх своего канала (без root)")
     parser.add_argument("--share", help="каталог-канал (по умолчанию из конфига)")
@@ -287,6 +343,15 @@ def build_parser() -> argparse.ArgumentParser:
     ark.add_argument("-n", "--name")
     ark.add_argument("-o", "--out")
     ark.set_defaults(func=cmd_ark)
+
+    chat = sub.add_parser("chat", help="чат в терминале")
+    chat.add_argument("--peer")
+    chat.set_defaults(func=cmd_chat)
+
+    web = sub.add_parser("web", help="локальный веб-чат (телефон)")
+    web.add_argument("--port", type=int, default=8787)
+    web.add_argument("--no-open", action="store_true")
+    web.set_defaults(func=cmd_web)
 
     sub.add_parser("whoami", help="кто я").set_defaults(func=cmd_whoami)
     return parser

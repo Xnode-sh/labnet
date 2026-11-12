@@ -2,6 +2,7 @@
 # Copyright (c) 2026 Xnode-sh — RED └•TEAM•┐ lab™
 import hashlib
 import json
+import os
 import socket
 import tempfile
 import threading
@@ -384,6 +385,70 @@ class ArkTest(unittest.TestCase):
         card = self.a.card()
         self.assertEqual(card["holdings"]["bytes"], 2_000_000)
         self.assertEqual(card["level"], "Знаток")
+
+
+class ChatTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        base = Path(self.tmp.name)
+        self.share = base / "share"
+        key = crypto.derive_net_key(PASSPHRASE, "redlab")
+        self.a = Mesh(Labnet.create("freya", "redlab", self.share, root=base / "a"), key)
+        self.b = Mesh(Labnet.create("acer", "redlab", self.share, root=base / "b"), key)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_history_encrypted_and_roundtrip(self):
+        from labnet.chat import ConversationStore
+        store = ConversationStore(self.a.net_key, Path(self.tmp.name) / "chat")
+        store.append("peer1", "out", "привет")
+        store.append("peer1", "in", "и тебе")
+        store.append("peer2", "in", "другой")
+        self.assertEqual([m["text"] for m in store.history("peer1")], ["привет", "и тебе"])
+        self.assertEqual(store.peers(), ["peer1", "peer2"])
+        raw = (Path(self.tmp.name) / "chat" / "peer1.json").read_bytes()
+        self.assertNotIn("привет".encode(), raw)
+        import stat
+        self.assertEqual(stat.S_IMODE(os.stat(Path(self.tmp.name) / "chat" / "peer1.json").st_mode), 0o600)
+
+    def test_chat_send_and_poll(self):
+        from labnet.chat import Chat
+        self.a.announce()
+        self.b.announce()
+        chat_a = Chat(self.a, self.a.net_key)
+        chat_b = Chat(self.b, self.b.net_key)
+        chat_a.send("acer", "как дела?")
+        chat_b.poll()
+        history = chat_b.store.history(self.a.node.node_id)
+        self.assertEqual(history[0]["text"], "как дела?")
+        self.assertEqual(history[0]["dir"], "in")
+
+    def test_web_endpoints(self):
+        import http.client
+        from http.server import ThreadingHTTPServer
+        from labnet import web
+        from labnet.chat import Chat
+        self.a.announce()
+        self.b.announce()
+        chat = Chat(self.a, self.a.net_key)
+        server = web.serve(chat, self.a, port=0)
+        port = server.server_address[1]
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        try:
+            conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+            conn.request("GET", "/api/peers")
+            peers = json.loads(conn.getresponse().read())
+            self.assertTrue(any(p["name"] == "acer" for p in peers["peers"]))
+            conn.request("POST", "/api/send", json.dumps({"peer": "acer", "text": "веб"}),
+                         {"Content-Type": "application/json"})
+            self.assertTrue(json.loads(conn.getresponse().read())["ok"])
+            conn.request("GET", "/api/messages?peer=" + self.b.node.node_id)
+            conn.getresponse().read()
+            conn.close()
+        finally:
+            server.shutdown()
+        self.assertEqual(chat.store.history(self.b.node.node_id)[0]["text"], "веб")
 
 
 class CryptoTest(unittest.TestCase):
