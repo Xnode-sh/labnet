@@ -1,0 +1,74 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Xnode-sh — RED └•TEAM•┐ lab™
+name: appliance-apk
+
+on:
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout labnet
+        uses: actions/checkout@v4
+
+      - name: Build doomsday bootstrap (our payload)
+        env:
+          WORK: ${{ github.workspace }}/build-out
+        run: bash appliance/make-bootstrap.sh
+
+      - name: Checkout termux-app
+        uses: actions/checkout@v4
+        with:
+          repository: termux/termux-app
+          ref: v0.118.3
+          path: termux-app
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install SDK/NDK
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;29.0.14206865"
+
+      - name: Place bootstraps (ours for aarch64) and patch checksums
+        run: |
+          set -euo pipefail
+          CPP=termux-app/app/src/main/cpp
+          mkdir -p "$CPP"
+          cp build-out/bootstrap-aarch64.zip "$CPP/bootstrap-aarch64.zip"
+          for a in arm i686 x86_64; do
+            curl -fL "https://github.com/termux/termux-packages/releases/latest/download/bootstrap-$a.zip" -o "$CPP/bootstrap-$a.zip"
+          done
+          python3 - "$CPP" <<'PY'
+          import hashlib, re, sys, pathlib
+          cpp = pathlib.Path(sys.argv[1])
+          gradle = pathlib.Path("termux-app/app/build.gradle")
+          text = gradle.read_text()
+          for arch in ("aarch64", "arm", "i686", "x86_64"):
+              h = hashlib.sha256((cpp / f"bootstrap-{arch}.zip").read_bytes()).hexdigest()
+              text, n = re.subn(rf'(downloadBootstrap\("{arch}", ")[0-9a-f]{{64}}(")', rf'\g<1>{h}\g<2>', text, count=1)
+              print(arch, "patched" if n else "NOT FOUND", h[:12])
+          gradle.write_text(text)
+          PY
+
+      - name: Build APK
+        working-directory: termux-app
+        env:
+          TERMUX_SPLIT_APKS_FOR_DEBUG_BUILDS: "0"
+        run: bash ./gradlew --no-daemon assembleDebug
+
+      - name: Show APK
+        run: find termux-app/app/build/outputs -name '*.apk' -print
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: redterm-apk
+          path: termux-app/app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
+          retention-days: 30
