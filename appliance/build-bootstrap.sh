@@ -46,6 +46,9 @@ fi
 say "сборка bootstrap в Docker (долго — десятки минут)"
 export TERMUX_APP_PACKAGE="$APP_PACKAGE"
 export TERMUX__PREFIX="$PREFIX"
+say "готовлю права для контейнера (user builder должен писать в каталог)"
+chmod -R a+rwX "$PKG" "$WORK" 2>/dev/null || true
+
 # Набор предустановки. Без git/rsync: их зависимости (apr-util) сейчас не собираются
 # из-за 404 на исходнике, а labnet уже вложен в bootstrap — git на устройстве не нужен.
 ( cd "$PKG" && ./scripts/run-docker.sh ./scripts/build-bootstraps.sh \
