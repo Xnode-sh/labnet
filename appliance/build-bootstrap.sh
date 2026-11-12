@@ -46,8 +46,14 @@ fi
 say "сборка bootstrap в Docker (долго — десятки минут)"
 export TERMUX_APP_PACKAGE="$APP_PACKAGE"
 export TERMUX__PREFIX="$PREFIX"
-say "готовлю права для контейнера (user builder должен писать в каталог)"
-chmod -R a+rwX "$PKG" "$WORK" 2>/dev/null || true
+say "готовлю права для контейнера (builder uid 1000 должен писать в каталог)"
+# На GitHub Actions uid раннера = 1001, из-за чего run-docker.sh пропускает выравнивание
+# builder (условие 'uid != 1001') -> builder (uid 1000) не может записать итоговый zip.
+if [ "${GITHUB_ACTIONS:-}" = "true" ] && command -v sudo >/dev/null 2>&1; then
+  sudo chown -R 1000:1000 "$WORK" 2>/dev/null || true
+else
+  chmod -R a+rwX "$PKG" "$WORK" 2>/dev/null || true
+fi
 
 # Набор предустановки. Без git/rsync: их зависимости (apr-util) сейчас не собираются
 # из-за 404 на исходнике, а labnet уже вложен в bootstrap — git на устройстве не нужен.
