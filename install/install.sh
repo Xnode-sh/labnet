@@ -43,6 +43,11 @@ else
 fi
 python3 "$HERE/labnet.py" announce || true
 
+# команда `labnet` в PATH
+mkdir -p "$PREFIX/bin"
+printf '#!/data/data/com.termux/files/usr/bin/bash\nexec python3 "%s/labnet.py" "$@"\n' "$HERE" > "$PREFIX/bin/labnet"
+chmod +x "$PREFIX/bin/labnet"
+
 # --- 3. набор выживания в Ковчег ---------------------------------------
 files="$(python3 "$HERE/labnet.py" ark stats 2>/dev/null | python3 -c 'import sys,json;print(json.load(sys.stdin).get("files",0))' 2>/dev/null || echo 0)"
 if [ "${files:-0}" = "0" ]; then

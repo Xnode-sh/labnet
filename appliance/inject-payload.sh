@@ -57,6 +57,9 @@ add_file(out, f"{base}/labnet.py", f"#!{prefix}/bin/python3\n".encode() + data[1
 add_file(out, "bin/labnet-setup",
          f'#!{prefix}/bin/bash\nexec bash "{prefix}/share/labnet/install/install.sh" "$@"\n'.encode(),
          0o755)
+add_file(out, "bin/labnet",
+         f'#!{prefix}/bin/bash\nexec python3 "{prefix}/share/labnet/labnet.py" "$@"\n'.encode(),
+         0o755)
 out.close()
 os.replace(boot + ".new", boot)
 
