@@ -66,16 +66,19 @@ add_file(out, "bin/labnet",
 firstrun = f'''# labnet первый запуск — один раз
 [ -n "$PS1" ] || return 0
 [ -f "$HOME/.labnet-ready" ] && return 0
-printf '\\n\\033[1m=== ПЕРВЫЙ ЗАПУСК: настраиваю сеть судного дня и локальный ИИ ===\\033[0m\\n'
-printf 'Это один раз и займёт несколько минут.\\n'
+printf '\\n\\033[1m=== ПЕРВЫЙ ЗАПУСК СЕТИ СУДНОГО ДНЯ ===\\033[0m\\n'
+printf 'Это один раз. Займёт несколько минут — просто жди, экран будет писать этапы.\\n'
 mkdir -p "$HOME"
+printf '\\n\\033[1m[1/3] Настраиваю сеть и Ковчег…\\033[0m\\n'
 if [ ! -f "$HOME/.config/labnet/net.pass" ]; then
-  python3 "{prefix}/share/labnet/labnet.py" key set >/dev/null 2>&1 || true
+  python3 "{prefix}/share/labnet/labnet.py" key set || true
 fi
-bash "{prefix}/share/labnet/install/install.sh" >/dev/null 2>&1 || true
+bash "{prefix}/share/labnet/install/install.sh" || true
+printf '\\n\\033[1m[2/3] Ставлю локальный ИИ (обновление пакетов, ollama, модель ~400 МБ)…\\033[0m\\n'
+printf 'Загрузка модели может занять несколько минут — это нормально.\\n'
 bash "{prefix}/share/labnet/install/ai-fix.sh" || true
 touch "$HOME/.labnet-ready"
-printf '\\n\\033[1m=== ГОТОВО. Пиши вопросы: ===\\033[0m\\n'
+printf '\\n\\033[1m[3/3] Готово. Пиши вопрос и жми Enter (выход из чата: /bye).\\033[0m\\n'
 '''
 add_file(out, "etc/profile.d/zz-labnet-firstrun.sh", firstrun.encode(), 0o644)
 out.close()
