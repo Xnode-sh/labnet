@@ -14,7 +14,7 @@ python3 - "$BOOT" "$PREFIX" "$SRCDIR" <<'PY'
 import os, stat, sys, zipfile
 
 boot, prefix, srcdir = sys.argv[1:4]
-items = ["labnet", "install", "seed", "docs"]
+items = ["labnet", "install", "seed", "docs", "run"]
 
 
 def add_file(zf, arc, data, mode=0o644):
