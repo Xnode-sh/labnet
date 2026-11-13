@@ -494,6 +494,30 @@ def cmd_rate(args) -> int:
     return 0
 
 
+def cmd_ai_up(args) -> int:
+    import shutil as _sh
+    import subprocess
+    import time as _t
+    if _sh.which("ollama") is None:
+        print("нет ollama. Установи: pkg install ollama")
+        return 1
+    running = False
+    try:
+        subprocess.run(["ollama", "list"], capture_output=True, timeout=5, check=True)
+        running = True
+    except Exception:
+        running = False
+    if not running:
+        print("запускаю сервер модели (ollama serve) в фоне…")
+        subprocess.Popen(["ollama", "serve"], stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, start_new_session=True)
+        _t.sleep(4)
+    print(f"готовлю модель {args.model} (первый раз — долго, качается ~1 ГБ)…")
+    subprocess.run(["ollama", "pull", args.model])
+    print("ИИ-узел готов. Отвечаю на вопросы сети.\n")
+    return cmd_serve_ai(args)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="labnet", description="Приватная сеть поверх своего канала (без root)")
     parser.add_argument("--share", help="каталог-канал (по умолчанию из конфига)")
@@ -617,6 +641,10 @@ def build_parser() -> argparse.ArgumentParser:
     ask.set_defaults(func=cmd_ask)
 
     sub.add_parser("serve-ai", help="отвечать на вопросы (ИИ/Ковчег)").set_defaults(func=cmd_serve_ai)
+
+    aiup = sub.add_parser("ai-up", help="поднять ИИ-узел: ollama + модель + ответы")
+    aiup.add_argument("--model", default="qwen2.5:1.5b")
+    aiup.set_defaults(func=cmd_ai_up)
 
     key = sub.add_parser("key", help="ключ сети (автономный режим)")
     key.add_argument("action", choices=["set", "where", "has"])
