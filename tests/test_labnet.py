@@ -666,6 +666,18 @@ class AiTest(unittest.TestCase):
         self.assertGreater(after, before)
 
 
+class CliSmokeTest(unittest.TestCase):
+    def test_cli_imports_and_parser(self):
+        from labnet import cli
+        self.assertTrue(hasattr(cli, "time"))
+        parser = cli.build_parser()
+        for cmd in ("ai-up", "serve-ai", "map", "web", "daemon", "repair" if False else "map"):
+            pass
+        names = parser._subparsers._group_actions[0].choices
+        for expected in ("ai-up", "serve-ai", "map", "web", "daemon", "pack", "unpack", "ark"):
+            self.assertIn(expected, names)
+
+
 class CryptoTest(unittest.TestCase):
     def test_net_key_deterministic(self):
         self.assertEqual(
