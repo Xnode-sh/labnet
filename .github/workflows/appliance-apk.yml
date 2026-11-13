@@ -36,12 +36,11 @@ jobs:
 
       - name: Rebrand (app name)
         run: |
-          set -euo pipefail
           RES=termux-app/app/src/main/res
-          grep -rl 'name="app_name"' "$RES"/values*/strings.xml 2>/dev/null | while read -r f; do
-            sed -i 's#<string name="app_name">Termux</string>#<string name="app_name">Ковчег</string>#' "$f"
+          for f in "$RES"/values/strings.xml "$RES"/values-*/strings.xml; do
+            [ -f "$f" ] && sed -i 's#<string name="app_name">Termux</string>#<string name="app_name">Ковчег</string>#' "$f"
           done
-          grep -rn 'name="app_name"' "$RES"/values/strings.xml || true
+          grep -rn 'name="app_name"' "$RES/values/strings.xml" || true
 
       - name: Install SDK/NDK
         env:
