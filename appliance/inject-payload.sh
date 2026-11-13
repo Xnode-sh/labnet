@@ -76,9 +76,13 @@ fi
 bash "{prefix}/share/labnet/install/install.sh" || true
 printf '\\n\\033[1m[2/3] Ставлю локальный ИИ (обновление пакетов, ollama, модель ~400 МБ)…\\033[0m\\n'
 printf 'Загрузка модели может занять несколько минут — это нормально.\\n'
-bash "{prefix}/share/labnet/install/ai-fix.sh" || true
+LABNET_NOCHAT=1 bash "{prefix}/share/labnet/install/ai-fix.sh" || true
 touch "$HOME/.labnet-ready"
-printf '\\n\\033[1m[3/3] Готово. Пиши вопрос и жми Enter (выход из чата: /bye).\\033[0m\\n'
+printf '\\n\\033[1m[3/3] Открываю приложение «Ковчег» в браузере…\\033[0m\\n'
+nohup python3 "{prefix}/share/labnet/labnet.py" web --no-open >/dev/null 2>&1 &
+sleep 3
+termux-open-url "http://127.0.0.1:8787/" >/dev/null 2>&1 || true
+printf 'Готово. Если окно не открылось — открой в браузере: http://127.0.0.1:8787\\n'
 '''
 add_file(out, "etc/profile.d/zz-labnet-firstrun.sh", firstrun.encode(), 0o644)
 out.close()

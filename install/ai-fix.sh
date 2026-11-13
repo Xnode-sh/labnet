@@ -36,5 +36,9 @@ if [ -n "$PERSONA" ]; then
   fi
 fi
 
-say "6/6 открываю чат (выход: /bye)"
-ollama run "$RUNMODEL"
+if [ "${LABNET_NOCHAT:-0}" = "1" ]; then
+  say "6/6 ИИ готов (чат откроется в приложении)"
+else
+  say "6/6 открываю чат в терминале (выход: /bye)"
+  ollama run "$RUNMODEL"
+fi
