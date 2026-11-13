@@ -60,6 +60,24 @@ add_file(out, "bin/labnet-setup",
 add_file(out, "bin/labnet",
          f'#!{prefix}/bin/bash\nexec python3 "{prefix}/share/labnet/labnet.py" "$@"\n'.encode(),
          0o755)
+
+# Автозапуск при первом открытии Termux (через etc/profile.d): настроит сеть,
+# поставит локальный ИИ и откроет чат — без единой ручной команды.
+firstrun = f'''# labnet первый запуск — один раз
+[ -n "$PS1" ] || return 0
+[ -f "$HOME/.labnet-ready" ] && return 0
+printf '\\n\\033[1m=== ПЕРВЫЙ ЗАПУСК: настраиваю сеть судного дня и локальный ИИ ===\\033[0m\\n'
+printf 'Это один раз и займёт несколько минут.\\n'
+mkdir -p "$HOME"
+if [ ! -f "$HOME/.config/labnet/net.pass" ]; then
+  python3 "{prefix}/share/labnet/labnet.py" key set >/dev/null 2>&1 || true
+fi
+bash "{prefix}/share/labnet/install/install.sh" >/dev/null 2>&1 || true
+bash "{prefix}/share/labnet/install/ai-fix.sh" || true
+touch "$HOME/.labnet-ready"
+printf '\\n\\033[1m=== ГОТОВО. Пиши вопросы: ===\\033[0m\\n'
+'''
+add_file(out, "etc/profile.d/zz-labnet-firstrun.sh", firstrun.encode(), 0o644)
 out.close()
 os.replace(boot + ".new", boot)
 

@@ -37,4 +37,4 @@ if [ -n "$PERSONA" ]; then
 fi
 
 say "6/6 открываю чат (выход: /bye)"
-exec ollama run "$RUNMODEL"
+ollama run "$RUNMODEL"
