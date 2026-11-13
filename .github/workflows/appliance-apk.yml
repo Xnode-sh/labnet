@@ -99,10 +99,10 @@ jobs:
           set -euo pipefail
           APK=$(find termux-app/app/build/outputs/apk -name '*.apk' | head -1)
           echo "APK: $APK  ($(du -h "$APK" | cut -f1))"
-          if gh release view apk-v0.6 -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload apk-v0.6 "$APK" -R "$GITHUB_REPOSITORY" --clobber
+          if gh release view apk-v0.7 -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload apk-v0.7 "$APK" -R "$GITHUB_REPOSITORY" --clobber
           else
-            gh release create apk-v0.6 "$APK" -R "$GITHUB_REPOSITORY" \
+            gh release create apk-v0.7 "$APK" -R "$GITHUB_REPOSITORY" \
               --title "RED TERM — сеть судного дня (APK v0.1)" \
               --notes "Termux с предустановленной сетью labnet: связь, Ковчег знаний, набор выживания, ИИ-узел, чат, sneakernet. При первом запуске bin/labnet-setup доустановит python (нужен интернет один раз)."
           fi
