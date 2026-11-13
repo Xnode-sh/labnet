@@ -535,8 +535,26 @@ def cmd_ai_up(args) -> int:
     else:
         ai.DEFAULT_MODEL = "ark"
         print("модель 'ark' готова (персона подключена).")
-    print("ИИ-узел запущен. Отвечаю на вопросы сети.\n")
-    return cmd_serve_ai(args)
+    # параллельно отвечаем сети, в этом же окне — живой чат
+    import threading
+    threading.Thread(target=cmd_serve_ai, args=(args,), daemon=True).start()
+    mesh = _mesh(args)
+    print("\n=== Чат с локальным ИИ (ARK). /quit или Ctrl-C — выход ===\n")
+    while True:
+        try:
+            q = input("ты> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            break
+        if not q or q in ("/quit", "/exit"):
+            break
+        ans = ai.answer(mesh.ark, q, focus=mesh.node.focus, allow_general=True)
+        print(f"\nARK> {ans['text']}")
+        if ans["sources"]:
+            print(f"   (источники: {', '.join(ans['sources'])})\n")
+        else:
+            print()
+    return 0
 
 
 def build_parser() -> argparse.ArgumentParser:

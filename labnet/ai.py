@@ -92,13 +92,17 @@ def retrieve(ark, question: str, limit: int = 3) -> list[dict]:
     return [item[1] for item in scored[:limit]]
 
 
-def answer(ark, question: str, model: str | None = None, runner=None, focus: str = "") -> dict:
+def answer(ark, question: str, model: str | None = None, runner=None, focus: str = "",
+           allow_general: bool = False) -> dict:
     model = model or DEFAULT_MODEL
     sources = retrieve(ark, question)
-    if not sources:
-        return {"text": "не знаю", "sources": [], "model": None}
-    context = "\n\n".join(f"[{s['name']}]\n{s['snippet']}" for s in sources)[:MAX_CONTEXT_CHARS]
     persona = persona_text() + (f"\nТвой узел специализируется на: {focus}." if focus else "")
+    if not sources:
+        if not (allow_general and provider_available()):
+            return {"text": "не знаю", "sources": [], "model": None}
+        reply = run_model(f"{persona}\n\nВопрос: {question}\nОтвет:", model, runner=runner)
+        return {"text": reply or "не знаю", "sources": [], "model": model}
+    context = "\n\n".join(f"[{s['name']}]\n{s['snippet']}" for s in sources)[:MAX_CONTEXT_CHARS]
     if provider_available():
         prompt = f"{persona}\n\nИсточники:\n{context}\n\nВопрос: {question}\nОтвет:"
         reply = run_model(prompt, model, runner=runner)
