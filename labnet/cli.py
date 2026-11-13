@@ -362,6 +362,7 @@ def cmd_ask(args) -> int:
 
 
 def cmd_serve_ai(args) -> int:
+    os.environ.setdefault("OLLAMA_VULKAN", "false")
     from . import ai
     from .chat import Chat
     mesh = _mesh(args)
@@ -498,6 +499,7 @@ def cmd_rate(args) -> int:
 def cmd_ai_up(args) -> int:
     import subprocess
     import time as _t
+    os.environ.setdefault("OLLAMA_VULKAN", "false")
     from . import ai
     if shutil.which("ollama") is None:
         print("нет ollama — ставлю…")
