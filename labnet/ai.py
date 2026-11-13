@@ -7,6 +7,7 @@ sources, honestly, or "не знаю" when nothing matches.
 """
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -17,8 +18,28 @@ PERSONA = (
     "по фактам. Если в предоставленных источниках нет ответа — скажи «не знаю» и не "
     "выдумывай. Всегда полезнее честное «не знаю», чем ложная уверенность."
 )
-DEFAULT_MODEL = "qwen2.5:1.5b"
+DEFAULT_MODEL = os.environ.get("LABNET_MODEL", "qwen2.5:1.5b")
 MAX_CONTEXT_CHARS = 4000
+PERSONA_CANDIDATES = [
+    os.environ.get("LABNET_PERSONA", ""),
+    (os.environ.get("PREFIX", "/data/data/com.termux/files/usr")
+     + "/share/labnet/install/persona-doomsday.md"),
+    os.path.expanduser("~/labnet/install/persona-doomsday.md"),
+    os.path.expanduser("~/deploy-kit/persona-doomsday.md"),
+]
+
+
+def persona_text() -> str:
+    """Персона узла: из файла, иначе встроенный текст."""
+    for path in PERSONA_CANDIDATES:
+        if path and os.path.isfile(path):
+            try:
+                text = open(path, encoding="utf-8").read().strip()
+                if text:
+                    return text
+            except OSError:
+                pass
+    return PERSONA
 
 
 def provider_available() -> bool:
@@ -71,12 +92,13 @@ def retrieve(ark, question: str, limit: int = 3) -> list[dict]:
     return [item[1] for item in scored[:limit]]
 
 
-def answer(ark, question: str, model: str = DEFAULT_MODEL, runner=None, focus: str = "") -> dict:
+def answer(ark, question: str, model: str | None = None, runner=None, focus: str = "") -> dict:
+    model = model or DEFAULT_MODEL
     sources = retrieve(ark, question)
     if not sources:
         return {"text": "не знаю", "sources": [], "model": None}
     context = "\n\n".join(f"[{s['name']}]\n{s['snippet']}" for s in sources)[:MAX_CONTEXT_CHARS]
-    persona = PERSONA + (f"\nТвой узел специализируется на: {focus}." if focus else "")
+    persona = persona_text() + (f"\nТвой узел специализируется на: {focus}." if focus else "")
     if provider_available():
         prompt = f"{persona}\n\nИсточники:\n{context}\n\nВопрос: {question}\nОтвет:"
         reply = run_model(prompt, model, runner=runner)
@@ -90,7 +112,7 @@ def answer(ark, question: str, model: str = DEFAULT_MODEL, runner=None, focus: s
     }
 
 
-def handle_ask(ark, message: dict, model: str = DEFAULT_MODEL, runner=None, focus: str = "") -> str:
+def handle_ask(ark, message: dict, model: str | None = None, runner=None, focus: str = "") -> str:
     return answer(ark, message.get("text", ""), model=model, runner=runner, focus=focus)["text"]
 
 

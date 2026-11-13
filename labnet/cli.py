@@ -495,26 +495,46 @@ def cmd_rate(args) -> int:
 
 
 def cmd_ai_up(args) -> int:
-    import shutil as _sh
     import subprocess
     import time as _t
-    if _sh.which("ollama") is None:
-        print("нет ollama. Установи: pkg install ollama")
-        return 1
-    running = False
+    from . import ai
+    if shutil.which("ollama") is None:
+        print("нет ollama — ставлю…")
+        subprocess.run(["pkg", "install", "-y", "ollama"])
+    # сервер модели
+    need = True
     try:
-        subprocess.run(["ollama", "list"], capture_output=True, timeout=5, check=True)
-        running = True
+        if subprocess.run(["ollama", "list"], capture_output=True, timeout=5).returncode == 0:
+            need = False
     except Exception:
-        running = False
-    if not running:
+        need = True
+    if need:
         print("запускаю сервер модели (ollama serve) в фоне…")
+        subprocess.run(["pkill", "-f", "ollama serve"], capture_output=True)
         subprocess.Popen(["ollama", "serve"], stdout=subprocess.DEVNULL,
                          stderr=subprocess.DEVNULL, start_new_session=True)
-        _t.sleep(4)
-    print(f"готовлю модель {args.model} (первый раз — долго, качается ~1 ГБ)…")
+        _t.sleep(5)
+    print(f"качаю базовую модель {args.model} (первый раз — долго)…")
     subprocess.run(["ollama", "pull", args.model])
-    print("ИИ-узел готов. Отвечаю на вопросы сети.\n")
+    # модель с персоной
+    persona = ai.persona_text()
+    mf = Path(os.environ.get("TMPDIR", "/data/data/com.termux/files/usr/tmp")) / "labnet-ark.Modelfile"
+    mf.write_text(
+        f'FROM {args.model}\n'
+        'PARAMETER temperature 0.3\n'
+        'PARAMETER num_ctx 4096\n'
+        f'SYSTEM """{persona}"""\n',
+        encoding="utf-8",
+    )
+    print("собираю модель 'ark' с персоной судного дня…")
+    res = subprocess.run(["ollama", "create", "ark", "-f", str(mf)])
+    if res.returncode != 0:
+        print("не удалось создать модель ark — работаю на базовой:", args.model)
+        ai.DEFAULT_MODEL = args.model
+    else:
+        ai.DEFAULT_MODEL = "ark"
+        print("модель 'ark' готова (персона подключена).")
+    print("ИИ-узел запущен. Отвечаю на вопросы сети.\n")
     return cmd_serve_ai(args)
 
 
@@ -643,7 +663,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("serve-ai", help="отвечать на вопросы (ИИ/Ковчег)").set_defaults(func=cmd_serve_ai)
 
     aiup = sub.add_parser("ai-up", help="поднять ИИ-узел: ollama + модель + ответы")
-    aiup.add_argument("--model", default="qwen2.5:1.5b")
+    aiup.add_argument("--model", default="qwen2.5:0.5b")
     aiup.set_defaults(func=cmd_ai_up)
 
     key = sub.add_parser("key", help="ключ сети (автономный режим)")
